@@ -24,6 +24,12 @@ class Memory:
         with self.drv.session() as s:
             s.run("MERGE (a:Agent {name:$n})", n=name)
 
+    def reset_agent(self, name):
+        """Wipe an agent's prior steps for a clean life-record run."""
+        with self.drv.session() as s:
+            s.run("MATCH (a:Agent {name:$n})-[:DID]->(st:Step) DETACH DELETE st", n=name)
+            s.run("MERGE (a:Agent {name:$n})", n=name)
+
     def log_step(self, agent, t, seen, thought, target, place=None):
         """Append one perceive->decide->act step to the agent's life-record."""
         with self.drv.session() as s:
