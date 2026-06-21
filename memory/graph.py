@@ -78,6 +78,13 @@ class Memory:
                       "RETURN a.name AS a, b.name AS b, r.feeling AS feeling, r.sentiment AS sentiment")
             return [dict(x) for x in r]
 
+    def add_reflection(self, agent, t, text):
+        """A higher-level memory the agent forms by reviewing its day."""
+        with self.drv.session() as s:
+            s.run("""MATCH (a:Agent {name:$a})
+                     CREATE (r:Reflection {t:$t, text:$text})
+                     CREATE (a)-[:REFLECTED]->(r)""", a=agent, t=t, text=text)
+
     def life_story(self, agent):
         with self.drv.session() as s:
             r = s.run(

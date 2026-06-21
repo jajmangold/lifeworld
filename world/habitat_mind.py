@@ -186,9 +186,26 @@ def main():
         print(f"[tick {tick}] needs={nshow} (urgent:{urgent}) -> '{match}' "
               f"({reason}) [relieves {sat}] walked {steps} frames")
 
+    story = mem.life_story(a.name)
     print("[mind] life so far:")
-    for s in mem.life_story(a.name):
+    for s in story:
         print(f"   t{s['t']}: went to {s['target']} — {s['thought']}")
+
+    # end-of-day reflection: the agent reviews its life-record and journals
+    if story:
+        log = "; ".join(f"t{s['t']} went to {s['target']} ({s['thought']})" for s in story)
+        try:
+            j = decide(
+                f"You are {a.name}. Reflect honestly on your evening in a 2-3 sentence "
+                "first-person journal entry. Reply ONLY JSON.",
+                f"Your evening, in order: {log}. End needs: "
+                f"{ {k: round(v,2) for k,v in needs.items()} }. "
+                'Write {"journal":"<2-3 sentences>","mood":"<one word>"}.')
+            mem.add_reflection(a.name, a.ticks, j.get("journal", ""))
+            print(f"\n[mind] {a.name}'s journal ({j.get('mood','')}): {j.get('journal','')}")
+        except Exception as e:
+            print("reflection skipped:", e)
+
     mem.close(); sim.close()
     print(f"MIND_OK ticks={a.ticks} frames={fi[0]} dir={a.frames_dir}")
 
