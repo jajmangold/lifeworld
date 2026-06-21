@@ -1,0 +1,16 @@
+# Blender-free GPU SMPL-X renderer (pyrender + EGL, headless).
+# Run with: --gpus device=N -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive PYOPENGL_PLATFORM=egl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip \
+        libegl1 libgl1 libgles2 libglib2.0-0 libsm6 libxext6 ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# pyrender 0.1.45 pins PyOpenGL==3.1.0 — let it bring its own; don't pin separately.
+RUN pip3 install --no-cache-dir \
+        numpy==1.26.4 pyrender==0.1.45 trimesh==4.4.9 \
+        imageio==2.34.2 pillow==10.4.0
+
+WORKDIR /work
