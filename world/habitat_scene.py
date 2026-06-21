@@ -60,10 +60,14 @@ def main():
 
     pf = sim.pathfinder
     if not pf.is_loaded:
-        print("WARN: no navmesh; using origin")
-        spot = np.array([0.0, 0.0, 0.0])
-    else:
-        spot = np.array(pf.get_random_navigable_point())
+        ns = habitat_sim.NavMeshSettings()
+        ns.set_defaults()
+        ns.agent_radius = 0.2
+        ns.agent_height = 1.5
+        sim.recompute_navmesh(pf, ns)
+        print(f"recomputed navmesh: loaded={pf.is_loaded}")
+    spot = (np.array(pf.get_random_navigable_point()) if pf.is_loaded
+            else np.array([0.0, 0.0, 0.0]))
 
     placed = "none"
     if a.humanoid_urdf:
@@ -71,17 +75,27 @@ def main():
             aom = sim.get_articulated_object_manager()
             hum = aom.add_articulated_object_from_urdf(a.humanoid_urdf, fixed_base=True)
             hum.translation = mn.Vector3(float(spot[0]), float(spot[1]), float(spot[2]))
-            placed = f"urdf links={hum.num_links}"
+            try:
+                node = hum.root_scene_node
+                bb = node.compute_cumulative_bb()
+                placed = (f"urdf links={hum.num_links} "
+                          f"bb_size={[round(v,2) for v in bb.size()]}")
+            except Exception:
+                placed = f"urdf links={hum.num_links} (no bb)"
         except Exception as e:
             placed = f"FAILED ({e})"
 
-    # camera 2.6 m from the spot, eye height 1.5, looking at chest height
-    eye = spot + np.array([2.6, 1.5, 0.0])
-    yaw = look_at(eye, spot + np.array([0, 0.9, 0]))
+    # camera ~2.4 m from the spot, looking slightly DOWN at chest height (apt has no
+    # ceiling -> full look-at orientation avoids framing the void above)
+    eye = spot + np.array([3.0, 1.0, 0.6])
+    target = spot + np.array([0, 0.9, 0])
+    from habitat_sim.utils.common import quat_from_two_vectors
+    direction = (target - eye); direction /= (np.linalg.norm(direction) + 1e-9)
     agent = sim.get_agent(0)
     st = agent.get_state()
     st.position = eye.astype(np.float32)
-    st.rotation = mn.Quaternion.rotation(mn.Rad(float(yaw)), mn.Vector3(0, 1, 0))
+    st.rotation = quat_from_two_vectors(np.array([0.0, 0.0, -1.0]),
+                                        direction.astype(np.float64))
     agent.set_state(st)
 
     obs = sim.get_sensor_observations()
