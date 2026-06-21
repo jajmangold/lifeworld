@@ -1,0 +1,29 @@
+# Headless Habitat-Sim + Habitat-Lab on sm_70 (V100), no display (EGL).
+# Habitat-Sim is standard-CUDA rasterization (no RT cores) -> runs on Volta.
+# Built via micromamba because habitat-sim's headless build ships through conda.
+FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    MAMBA_ROOT_PREFIX=/opt/conda \
+    PATH=/opt/conda/bin:$PATH \
+    HABITAT_SIM_HEADLESS=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        bzip2 ca-certificates curl git libgl1 libegl1 libgles2 \
+        libglib2.0-0 libsm6 libxext6 libxrender1 ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# micromamba
+RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
+    | tar -xvj -C /usr/local/bin --strip-components=1 bin/micromamba
+
+# habitat-sim (headless build from the aihabitat channel) + python 3.9
+RUN micromamba create -y -p /opt/conda -c conda-forge -c aihabitat \
+        python=3.9 habitat-sim=0.3.1 headless withbullet && \
+    micromamba clean -ay
+
+# habitat-lab (humanoids / sensors / tasks)
+RUN git clone --depth 1 --branch v0.3.1 https://github.com/facebookresearch/habitat-lab.git /opt/habitat-lab && \
+    /opt/conda/bin/pip install -e /opt/habitat-lab/habitat-lab && \
+    /opt/conda/bin/pip install -e /opt/habitat-lab/habitat-baselines || true
+
+WORKDIR /work
