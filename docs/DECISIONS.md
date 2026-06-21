@@ -79,7 +79,13 @@ for 2D talking-head *video* shots. **Audio2Face-3D vertex-drive** stays the opti
 IsaacLab / Newton**. This is a ready-made SMPL→physics bridge.
 **Decision:** When pursuing the ADR-0005 physics/touch track, build on ProtoMotions rather than
 hand-rolling SMPL↔sim. Target Genesis or MuJoCo on the V100 fleet (no RT cores needed).
-**Open:** underlying sims (Genesis/MuJoCo) are not installed; ProtoMotions is code-only. Validate.
+**Open:** underlying sims (Genesis/MuJoCo) are not installed; ProtoMotions is code-only.
+**Spike result (2026-06-21):** current **Genesis requires torch≥2.8**, but the Volta-supporting
+CUDA wheels top out at **torch 2.6** (cu124), and Genesis also needs X11 at import
+(`XRenderFindVisualFormat`). So Genesis-on-sm_70 is NOT a quick win — it needs an older Genesis
+pinned to torch 2.4–2.6 + headless-X handling (xvfb). **Recommendation: use MuJoCo (CPU, via
+ProtoMotions `requirements_mujoco.txt`) as the physics path on this fleet**; revisit Genesis only
+with a version-pinned build or on the RTX box. Tracked in issue #11.
 
 ## ADR-0008 — Habitat is a fresh install; Replica scene data already present
 **Status:** noted (amends ADR-0001)

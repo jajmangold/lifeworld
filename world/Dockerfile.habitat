@@ -26,6 +26,11 @@ RUN git clone --depth 1 --branch v0.3.1 https://github.com/facebookresearch/habi
     /opt/conda/bin/pip install -e /opt/habitat-lab/habitat-lab && \
     /opt/conda/bin/pip install -e /opt/habitat-lab/habitat-baselines || true
 
+# git-lfs: habitat's dataset downloader git-clones LFS repos (ReplicaCAD etc.);
+# without it you get pointer files, not assets.
+RUN apt-get update && apt-get install -y --no-install-recommends git-lfs && \
+    git lfs install && rm -rf /var/lib/apt/lists/*
+
 # The cuda:runtime base ships only the Mesa EGL vendor ICD; without the NVIDIA one,
 # glvnd loads software EGL and habitat-sim can't match its CUDA device ("unable to
 # find CUDA device 0 among 1 EGL devices"). Register the NVIDIA EGL vendor explicitly.
