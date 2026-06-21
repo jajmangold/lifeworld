@@ -91,44 +91,50 @@ def main():
     os.makedirs(SCENE, exist_ok=True)
     names = [c["name"] for c in CAST]
 
-    # 1. generate a short ordered dialogue (2 rounds)
-    transcript, beats = [], []
-    for rnd in range(2):
-        for i, c in enumerate(CAST):
-            convo = "\n".join(f"{t['who']}: {t['say']}" for t in transcript[-6:])
-            out = deepseek(
-                f"You are {c['name']}: {PERSONA[c['name']]}. In a room with "
-                f"{', '.join(n for n in names if n != c['name'])}. ONE short spoken line. Reply ONLY JSON.",
-                f"SCENE: {SEED}\nSo far:\n{convo or '(start)'}\nYour line. "
-                '{"say":"<one short sentence>"}')
-            say = out.get("say", "").strip()
-            transcript.append({"who": c["name"], "say": say})
-            wav = f"{SCENE}/{c['name'].lower()}_{rnd}.wav"
-            ak = f"{SCENE}/{c['name'].lower()}_{rnd}.arkit.json"
-            tts(say, wav, c["voice"])       # lip-sync (A2F) batched below
-            dur = wave.open(wav, "rb").getnframes() / wave.open(wav, "rb").getframerate()
-            beats.append({"speaker": i, "audio": wav.replace(SAMPL, "/work"),
-                          "arkit": ak.replace(SAMPL, "/work"), "wav_host": wav,
-                          "a2f_id": c["a2f_id"], "dur": dur})
-            print(f"  {c['name']}: {say}  ({dur:.1f}s)")
+    scene_json = f"{SCENE}/scene.json"
+    if "--reuse" in sys.argv and os.path.exists(scene_json):
+        # FAST re-render: reuse cached dialogue/TTS/A2F, only re-bake + re-render.
+        beats = json.load(open(scene_json))["beats"]
+        print(f"[scene_cine] --reuse: {len(beats)} cached beats (skipping dialogue/TTS/A2F)")
+    else:
+        # 1. generate a short ordered dialogue (2 rounds)
+        transcript, beats = [], []
+        for rnd in range(2):
+            for i, c in enumerate(CAST):
+                convo = "\n".join(f"{t['who']}: {t['say']}" for t in transcript[-6:])
+                out = deepseek(
+                    f"You are {c['name']}: {PERSONA[c['name']]}. In a room with "
+                    f"{', '.join(n for n in names if n != c['name'])}. ONE short spoken line. Reply ONLY JSON.",
+                    f"SCENE: {SEED}\nSo far:\n{convo or '(start)'}\nYour line. "
+                    '{"say":"<one short sentence>"}')
+                say = out.get("say", "").strip()
+                transcript.append({"who": c["name"], "say": say})
+                wav = f"{SCENE}/{c['name'].lower()}_{rnd}.wav"
+                ak = f"{SCENE}/{c['name'].lower()}_{rnd}.arkit.json"
+                tts(say, wav, c["voice"])       # lip-sync (A2F) batched below
+                dur = wave.open(wav, "rb").getnframes() / wave.open(wav, "rb").getframerate()
+                beats.append({"speaker": i, "audio": wav.replace(SAMPL, "/work"),
+                              "arkit": ak.replace(SAMPL, "/work"), "wav_host": wav,
+                              "a2f_id": c["a2f_id"], "dur": dur})
+                print(f"  {c['name']}: {say}  ({dur:.1f}s)")
 
-    # 1b. Audio2Face-3D lip-sync for every line in ONE container session (CMP/V100, ORT)
-    manifest = f"{SCENE}/a2f_manifest.json"
-    json.dump([{"wav": b["audio"].replace("/work", "/asset"),
-                "out": b["arkit"].replace("/work", "/asset"),
-                "identity": b["a2f_id"]} for b in beats], open(manifest, "w"))
-    run(["docker", "run", "--rm", "--gpus", "device=1",
-         "-e", "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
-         "-v", f"{SAMPL}:/asset", "-v", f"{BOT}:/lw", "-v", f"{A2F_DIR}:/a2f", "-w", "/lw",
-         "lifeworld-a2f", "python3", "render/a2f_lipsync.py", "--a2f", "/a2f",
-         "--manifest", "/asset/output/scene/a2f_manifest.json"])
+        # 1b. Audio2Face-3D lip-sync for every line in ONE container session (CMP/V100, ORT)
+        manifest = f"{SCENE}/a2f_manifest.json"
+        json.dump([{"wav": b["audio"].replace("/work", "/asset"),
+                    "out": b["arkit"].replace("/work", "/asset"),
+                    "identity": b["a2f_id"]} for b in beats], open(manifest, "w"))
+        run(["docker", "run", "--rm", "--gpus", "device=1",
+             "-e", "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+             "-v", f"{SAMPL}:/asset", "-v", f"{BOT}:/lw", "-v", f"{A2F_DIR}:/a2f", "-w", "/lw",
+             "lifeworld-a2f", "python3", "render/a2f_lipsync.py", "--a2f", "/a2f",
+             "--manifest", "/asset/output/scene/a2f_manifest.json"])
 
-    # 2. scene config for the baker
-    chars = [{"name": c["name"], "gender": c["gender"], "betas": c["betas"],
-              "pos": c["pos"], "yaw_deg": c["yaw_deg"]} for c in CAST]
-    cfg = {"fps": FPS, "characters": chars,
-           "beats": [{"speaker": b["speaker"], "audio": b["audio"], "arkit": b["arkit"]} for b in beats]}
-    json.dump(cfg, open(f"{SCENE}/scene.json", "w"))
+        # 2. scene config for the baker
+        chars = [{"name": c["name"], "gender": c["gender"], "betas": c["betas"],
+                  "pos": c["pos"], "yaw_deg": c["yaw_deg"]} for c in CAST]
+        cfg = {"fps": FPS, "characters": chars,
+               "beats": [{"speaker": b["speaker"], "audio": b["audio"], "arkit": b["arkit"]} for b in beats]}
+        json.dump(cfg, open(scene_json, "w"))
 
     # 3. bake the multi-person clip (CPU, sampl:dev)
     run(["docker", "run", "--rm", "-v", f"{SAMPL}:/work", "-v", f"{BOT}:/lw",
