@@ -35,7 +35,22 @@ def parse_args():
     ap.add_argument("--flip-v", action="store_true",
                     help="flip texture V if it renders upside-down")
     ap.add_argument("--bg", default="0.05,0.05,0.07")
+    ap.add_argument("--no-ground", action="store_true", help="omit floor plane")
+    ap.add_argument("--no-shadows", action="store_true", help="disable shadow maps")
     return ap.parse_args()
+
+
+def ground_plane(all_verts, half=4.0):
+    """Large floor quad at foot height to ground the character + catch shadows."""
+    y = float(all_verts.reshape(-1, 3)[:, 1].min())
+    cx, cz = all_verts.reshape(-1, 3)[:, 0].mean(), all_verts.reshape(-1, 3)[:, 2].mean()
+    v = np.array([[cx - half, y, cz - half], [cx + half, y, cz - half],
+                  [cx + half, y, cz + half], [cx - half, y, cz + half]], np.float32)
+    f = np.array([[0, 1, 2], [0, 2, 3]], np.int64)
+    tm = trimesh.Trimesh(vertices=v, faces=f, process=False)
+    mat = pyrender.MetallicRoughnessMaterial(
+        baseColorFactor=[0.32, 0.33, 0.36, 1.0], metallicFactor=0.0, roughnessFactor=1.0)
+    return pyrender.Mesh.from_trimesh(tm, material=mat, smooth=False)
 
 
 def rot_x_mat(deg):
@@ -73,9 +88,10 @@ def frame_camera(all_verts):
     height = float(hi[1] - lo[1])
     yfov = np.pi / 4.0
     dist = (height * 0.62) / np.tan(yfov / 2.0) + 0.5
-    pose = np.eye(4)
-    pose[:3, 3] = [center[0], center[1], center[2] + dist]
-    return yfov, pose, center
+    target = center.copy()
+    target[1] = lo[1] + 0.45 * height          # aim a touch low so feet/floor show
+    eye = np.array([center[0], center[1] + 0.10 * height, center[2] + dist])
+    return yfov, _aim(eye, target), center
 
 
 def main():
@@ -116,16 +132,22 @@ def main():
          _aim([0, 2, -3], center)),
     ]
     r = pyrender.OffscreenRenderer(a.res_x, a.res_y)
+    flags = pyrender.RenderFlags.NONE
+    if not a.no_shadows:
+        flags |= pyrender.RenderFlags.SHADOWS_DIRECTIONAL
+    ground = None if a.no_ground else ground_plane(verts)
 
     for fi in range(F):
         scene = pyrender.Scene(bg_color=bg + [1.0],
                                ambient_light=[0.35, 0.35, 0.38])
+        if ground is not None:
+            scene.add(ground)
         for p in range(P):
             scene.add(build_mesh(verts[p, fi], faces, uv, tex_img, a.flip_v))
         scene.add(cam, pose=cam_pose)
         for lt, pose in lights:
             scene.add(lt, pose=pose)
-        color, _ = r.render(scene)
+        color, _ = r.render(scene, flags=flags)
         imageio.imwrite(os.path.join(a.out_dir, f"frame_{fi:04d}.png"), color)
         if fi % 12 == 0:
             print(f"[render] frame {fi+1}/{F}")
