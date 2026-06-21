@@ -20,6 +20,7 @@ import smplx
 from face.talk import (audio_to_face, eyelid_upper_indices,
                        apply_blink, lip_region, apply_lips)
 from face_drive import drive          # single coherent face driver
+from mouth_parts import build_mouth
 
 
 def parse_args():
@@ -86,8 +87,14 @@ def main():
         except Exception as e:
             lips = f"skipped ({e})"
 
-    np.savez_compressed(a.out, verts=verts, faces=faces, rot_x=0.0)
-    print(f"[bake_talk] {a.out}  verts={verts.shape} frames={F} face={src} blinks={blinks} lips={lips}")
+    # teeth/tongue geometry (rendered when mouth open) so the open mouth isn't a void
+    mv, mf, mcol = build_mouth(verts, lip_region(model, np.full(10, float(a.shape), np.float32))["idx"],
+                               face["jaw"][:, 0])
+    np.savez_compressed(a.out, verts=verts, faces=faces, rot_x=0.0,
+                        mouth_verts=mv, mouth_faces=mf, mouth_colors=mcol,
+                        mouth_gate=face["jaw"][:, 0])
+    print(f"[bake_talk] {a.out}  verts={verts.shape} frames={F} face={src} "
+          f"blinks={blinks} lips={lips} teeth=on")
 
 
 if __name__ == "__main__":

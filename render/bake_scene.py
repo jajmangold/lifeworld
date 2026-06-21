@@ -19,6 +19,7 @@ import smplx
 from face.talk import (_gaze_channels, eyelid_upper_indices,
                        apply_blink, lip_region, apply_lips)
 from face_drive import drive          # single coherent face driver
+from mouth_parts import build_mouth
 
 
 def apose():
@@ -50,7 +51,7 @@ def main():
     print(f"[bake_scene] {len(chars)} chars, {len(beats)} beats, {total_F} frames @ {fps}fps")
 
     body0 = apose()
-    all_verts = []
+    all_verts = []; all_mouth = []; all_gate = []; mfaces = mcolors = None
     for ci, ch in enumerate(chars):
         jaw = np.zeros((total_F, 3), np.float32)
         leye, reye = _gaze_channels(total_F, seed=ci)      # ONE continuous gaze (never overwritten)
@@ -93,13 +94,17 @@ def main():
             apply_lips(v, lip_region(model, betas[0]), mc, mp)
         except Exception as e:
             print("  face-mesh apply skipped:", e)
+        mvp, mfaces, mcolors = build_mouth(v, lip_region(model, betas[0])["idx"], jaw[:, 0])
+        all_mouth.append(mvp); all_gate.append(jaw[:, 0])
         all_verts.append(v)
         print(f"  {ch['name']}: gender={g} pos=({x},{z}) yaw={ch.get('yaw_deg',0)}")
 
     verts = np.stack(all_verts, 0)                          # (P, F, V, 3)
     faces = smplx.create(a.model_dir, model_type="smplx", gender="neutral").faces.astype(np.int64)
     np.savez_compressed(a.out, verts=verts, faces=faces, rot_x=0.0,
-                        beat_frames=np.array(beat_F))
+                        beat_frames=np.array(beat_F),
+                        mouth_verts=np.stack(all_mouth, 0), mouth_faces=mfaces,
+                        mouth_colors=mcolors, mouth_gate=np.stack(all_gate, 0))
     print(f"[bake_scene] wrote {a.out} verts={verts.shape}")
 
 

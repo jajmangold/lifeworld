@@ -125,10 +125,25 @@ def main():
         verts = verts[None]
     P, F = verts.shape[0], verts.shape[1]
 
+    # optional teeth/tongue mouth geometry (SMPL-X has none); (P,F,M,3)+(P,F) gate
+    mverts = mfaces = mcolors = mgate = None
+    if "mouth_verts" in d.files:
+        mverts = np.asarray(d["mouth_verts"], np.float32)
+        if mverts.ndim == 3:
+            mverts = mverts[None]
+        mfaces = np.asarray(d["mouth_faces"], np.int64)
+        mcolors = np.asarray(d["mouth_colors"], np.uint8)
+        mgate = np.asarray(d["mouth_gate"], np.float32)
+        if mgate.ndim == 1:
+            mgate = mgate[None]
+        print(f"[render] mouth geometry: {mverts.shape}")
+
     R = rot_x_mat(a.rot_x)
     if a.rot_x:
         for p in range(P):
             verts[p] = (R[:3, :3] @ verts[p].reshape(-1, 3).T).T.reshape(F, -1, 3)
+            if mverts is not None:
+                mverts[p] = (R[:3, :3] @ mverts[p].reshape(-1, 3).T).T.reshape(F, -1, 3)
 
     uv = None
     tex_imgs = []                     # one per person (cycled if fewer than P)
@@ -171,6 +186,9 @@ def main():
         for p in range(P):
             tex = tex_imgs[p % len(tex_imgs)] if tex_imgs else None
             scene.add(build_mesh(verts[p, fi], faces, uv, tex, a.flip_v))
+            if mverts is not None and mgate[p, fi] > 0.05:   # teeth/tongue when mouth open
+                mt = trimesh.Trimesh(mverts[p, fi], mfaces, vertex_colors=mcolors, process=False)
+                scene.add(pyrender.Mesh.from_trimesh(mt, smooth=False))
         scene.add(cam, pose=cam_pose)
         for lt, pose in lights:
             scene.add(lt, pose=pose)

@@ -17,6 +17,7 @@ import numpy as np
 import torch
 import smplx
 import pyrender
+import trimesh
 from PIL import Image
 
 sys.path.insert(0, "/work")          # sampl: face.talk
@@ -24,6 +25,7 @@ sys.path.insert(0, "/lw/render")     # face_drive, render_smplx
 from face_drive import drive
 from face.talk import eyelid_upper_indices, apply_blink, lip_region, apply_lips
 from render_smplx import build_mesh, frame_camera, _aim
+from mouth_parts import build_mouth
 
 
 def bake(arkit, model, betas_row, F, fps):
@@ -70,6 +72,8 @@ def main():
         betas_row[:len(bv)] = bv[:10]
     verts, face = bake(arkit, model, betas_row, F, a.fps)
     faces = model.faces.astype(np.int64)
+    # teeth + tongue + dark interior (SMPL-X has none -> open mouth is a black void)
+    mv, mf, mcol = build_mouth(verts, lip_region(model, betas_row)["idx"], face["jaw"][:, 0])
 
     uv = np.load(a.uv)["uv_coordinates"] if os.path.exists(a.uv) else None
     tex = Image.open(a.texture).convert("RGB") if os.path.exists(a.texture) else None
@@ -83,6 +87,9 @@ def main():
     def render(fi):
         s = pyrender.Scene(bg_color=[0.05, 0.05, 0.07, 1.0], ambient_light=[0.4, 0.4, 0.42])
         s.add(build_mesh(verts[fi], faces, uv, tex))
+        if face["jaw"][fi, 0] > 0.05:        # only show teeth when the mouth is open
+            mt = trimesh.Trimesh(mv[fi], mf, vertex_colors=mcol, process=False)
+            s.add(pyrender.Mesh.from_trimesh(mt, smooth=False))
         s.add(cam, pose=cam_pose)
         for lt, p in lights:
             s.add(lt, pose=p)
