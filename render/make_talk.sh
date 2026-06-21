@@ -15,7 +15,7 @@ FPS=24
 SAMPL=/srv/nvme-data/containers/projects/sampl
 BOT=/srv/nvme-data/containers/projects/bot
 OUT=$SAMPL/output
-TEX=$SAMPL/assets/smplx_texture_f_alb_eyefix.png   # clothed + patched eye (see fix_eye_texture.py)
+TEX=/work/assets/smplx_texture_f_alb_eyefix.png    # CONTAINER path (sampl mounted at /work); clothed + patched eye
 
 # 1. TTS (Higgs :8055) + 2. LAM ARKit (:8202) — host python, stdlib only
 python3 - "$TEXT" "$OUT" <<'PY'
