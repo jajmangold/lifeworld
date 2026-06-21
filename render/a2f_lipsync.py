@@ -18,9 +18,11 @@ import sys
 import wave
 import numpy as np
 
-FPS = 30
-WIN = 16000
-CENTER0, CENTER1 = 15, 45      # keep center 30 of the 60 predicted frames
+FPS = 60                       # diffusion model outputs 60fps
+WIN = 16000                    # 1s audio buffer
+HOP = 8000                     # 0.5s hop (50% overlap) — per the A2F SDK protocol
+CENTER0, CENTER1 = 15, 45      # keep center 30 (=0.5s @60fps) of the 60 predicted frames
+LEAD_TRIM = 10                 # drop the constant lead so output frame 0 ~ audio 0 (tuned ~0 lag)
 SKIN_DIMS = 24002 * 3
 
 
@@ -73,15 +75,17 @@ def run_one(sess, ins, a2f_dir, wav, out, identity, cache):
         return [d if isinstance(d, int) and d > 0 else 1 for d in ins[name]]
 
     audio = load_wav_16k(wav)
-    audio = np.concatenate([np.zeros(WIN, np.float32), audio, np.zeros(WIN, np.float32)])
-    nwin = max(1, int(np.ceil((len(audio) - WIN) / WIN)) + 1)
+    dur = len(audio) / 16000.0
+    # 1s buffer, 0.5s hop (50% overlap); keep center 30 frames @60fps per call (A2F
+    # SDK protocol). NO leading pad. Sequential, carrying latents.
+    nwin = max(1, int(np.ceil(len(audio) / HOP)))
 
     lat = np.zeros(shp("input_latents"), np.float32)
     rng = np.random.RandomState(0)
     dmask, pinv, active, names = slv["dmask"], slv["pinv"], slv["active"], slv["names"]
     chunks = []
     for wi in range(nwin):
-        seg = audio[wi * WIN:wi * WIN + WIN]
+        seg = audio[wi * HOP:wi * HOP + WIN]
         if len(seg) < WIN:
             seg = np.concatenate([seg, np.zeros(WIN - len(seg), np.float32)])
         feeds = {
@@ -96,6 +100,7 @@ def run_one(sess, ins, a2f_dir, wav, out, identity, cache):
         chunks.append((pinv @ skin[:, dmask].T).T)           # (30, 52) ARKit weights
 
     W = np.concatenate(chunks, 0) * active[None, :]          # gate inactive poses
+    W = W[LEAD_TRIM:LEAD_TRIM + max(1, round(dur * FPS))]    # drop lead + trim to audio (A/V sync)
     # light temporal smoothing + clamp to ARKit [0,1]
     k = 3
     W = np.apply_along_axis(lambda v: np.convolve(np.pad(v, k // 2, "edge"),

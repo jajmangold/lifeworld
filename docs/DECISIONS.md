@@ -102,6 +102,15 @@ frontal-masked, active-pose-gated least-squares solve -> all 52 ARKit weights
 with mouth_close/pucker) + blinks (`apply_blink`). Validated: distinct visemes
 (open vowel vs closed bilabial) in single + cinematic multi-char renders.
 
+**Sync + jaw fixes (2026-06-21):** two bugs found after first multi-char render —
+(1) OUT OF SYNC: a2f_lipsync used a 1s hop / 30fps and prepended 1s of silence; the
+real A2F diffusion protocol (per SDK docs) is **60fps output, 1s buffer, 0.5s hop
+(50% overlap), keep center 30 frames**. Fixed windowing + a small constant lead-trim
+→ jaw-vs-audio cross-correlation lag 500ms→**0ms** (corr 0.46). (2) "UNHINGED JAW":
+arkit_to_face's LAM-era jaw range (jaw_max=0.52rad≈30°) saturated on A2F's strong
+jawOpen; bake_talk/bake_scene now pass jaw_max=0.24 (~13°), jaw_gain=1.1 so the
+mesh-space visemes shape the mouth instead of a giant drop.
+
 ## ADR-0007 — ProtoMotions as the physics-embodiment bridge (for ADR-0005)
 **Status:** accepted (validate next)
 **Context:** The review found **ProtoMotions** (`/mnt/24tb/containers-archive/charbrain/ProtoMotions`)
