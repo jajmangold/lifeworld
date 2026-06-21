@@ -3,7 +3,12 @@
 Lightweight ADRs. Each is mirrored to a GitHub issue for discussion.
 
 ## ADR-0001 — Embodiment substrate: Habitat 3.0 (not Isaac/Genie/AgiBot)
-**Status:** accepted (pending build validation on sm_70)
+**Status:** accepted — **VALIDATED on sm_70 (2026-06-21)**: headless habitat-sim built
+(micromamba, `world/Dockerfile.habitat`) and initialized its GPU EGL renderer on a
+Tesla V100, producing sensor frames. Gotcha fixed: the cuda:runtime base lacks the
+NVIDIA EGL vendor ICD (`10_nvidia.json`); without it glvnd loads software Mesa and
+habitat errors "unable to find CUDA device 0 among 1 EGL devices". The Dockerfile now
+writes the ICD.
 **Context:** Need a world for agents to live in with virtual sensors, on a Volta
 (sm_70, no RT cores) GPU fleet.
 **Decision:** Use Habitat 3.0. It runs on standard CUDA / headless / V100, its
