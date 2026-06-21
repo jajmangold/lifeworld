@@ -36,11 +36,16 @@ def make_cfg(a):
     bk.scene_dataset_config_file = a.scene_dataset
     bk.scene_id = a.scene
     bk.enable_physics = True
-    rgb = habitat_sim.CameraSensorSpec()
-    rgb.uuid = "rgb"; rgb.sensor_type = habitat_sim.SensorType.COLOR
-    rgb.resolution = a.res; rgb.position = [0.0, 1.4, 0.0]
+    specs = []
+    for uuid, stype in (("rgb", habitat_sim.SensorType.COLOR),
+                        ("depth", habitat_sim.SensorType.DEPTH),
+                        ("semantic", habitat_sim.SensorType.SEMANTIC)):
+        s = habitat_sim.CameraSensorSpec()
+        s.uuid = uuid; s.sensor_type = stype
+        s.resolution = a.res; s.position = [0.0, 1.4, 0.0]
+        specs.append(s)
     ag = habitat_sim.agent.AgentConfiguration()
-    ag.sensor_specifications = [rgb]
+    ag.sensor_specifications = specs
     return habitat_sim.Configuration(bk, [ag])
 
 
@@ -100,13 +105,25 @@ def main():
 
     obs = sim.get_sensor_observations()
     rgb = np.asarray(obs["rgb"])[..., :3]
-    try:
-        from PIL import Image
-        Image.fromarray(rgb).save(a.out)
-    except Exception as e:
-        print("save warn:", e)
+    from PIL import Image
+    Image.fromarray(rgb).save(a.out)
+    saved = ["rgb"]
+    # depth -> normalized grayscale png
+    d = np.asarray(obs["depth"], dtype=np.float32)
+    if d.size and d.max() > 0:
+        dn = (255 * np.clip(d / (np.percentile(d, 95) + 1e-6), 0, 1)).astype(np.uint8)
+        Image.fromarray(dn).save(a.out.replace(".png", "_depth.png"))
+        saved.append(f"depth(max={d.max():.1f}m)")
+    # semantic -> colorized png (ReplicaCAD may have no semantics -> all zeros)
+    sem = np.asarray(obs["semantic"])
+    nsem = int(np.unique(sem).size)
+    if nsem > 1:
+        rng = np.random.default_rng(0)
+        lut = rng.integers(0, 255, size=(int(sem.max()) + 1, 3), dtype=np.uint8)
+        Image.fromarray(lut[sem]).save(a.out.replace(".png", "_semantic.png"))
+        saved.append(f"semantic({nsem} ids)")
     print(f"SCENE_OK scene={a.scene} spot={spot.round(2).tolist()} humanoid={placed} "
-          f"rgb={rgb.shape} -> {a.out}")
+          f"rgb={rgb.shape} sensors={saved} -> {a.out}")
     sim.close()
 
 
