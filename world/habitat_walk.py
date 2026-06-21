@@ -55,11 +55,9 @@ def main():
     from PIL import Image
     from habitat_sim.utils.common import quat_from_two_vectors
 
+    import habnav
     sim = habitat_sim.Simulator(make_cfg(a))
-    ns = habitat_sim.NavMeshSettings(); ns.set_defaults()
-    ns.agent_radius = 0.3; ns.agent_height = 1.4
-    sim.recompute_navmesh(sim.pathfinder, ns)
-    pf = sim.pathfinder
+    pf = habnav.setup_navmesh(sim)            # navmesh that respects furniture
 
     # humanoid via habitat-lab wrapper (skinned via ao_config)
     agent_cfg = DictConfig({"articulated_agent_urdf": a.urdf, "motion_data_path": a.motion})
@@ -102,27 +100,16 @@ def main():
         sim.get_agent(0).set_state(st)
 
     ctrl = HumanoidRearrangeController(a.motion)
-    ctrl.reset(hum.base_transformation)
+    fc = [0]
 
-    n = 0
-    while n < a.max_steps:
-        diff = mn.Vector3(*target.tolist()) - hum.base_pos
-        if diff.length() < 0.3:
-            break
-        ctrl.calculate_walk_pose(diff)
-        pose = ctrl.get_pose()
-        joints = pose[:-16]
-        base = pose[-16:]
-        offset = pose[-32:-16]
-        if np.array(offset).sum() != 0:
-            vb = [mn.Vector4(base[i * 4:(i + 1) * 4]) for i in range(4)]
-            vo = [mn.Vector4(offset[i * 4:(i + 1) * 4]) for i in range(4)]
-            hum.set_joint_transform(joints, mn.Matrix4(*vo), mn.Matrix4(*vb))
-        hp = np.array(hum.base_pos)
-        aim_at(hp + np.array([0, 0.85, 0]))     # track the humanoid's torso
+    def on_frame():
+        aim_at(np.array(hum.base_pos) + np.array([0, 0.85, 0]))   # track torso
         rgb = np.asarray(sim.get_sensor_observations()["rgb"])[..., :3]
-        Image.fromarray(rgb).save(os.path.join(a.frames_dir, f"frame_{n:04d}.png"))
-        n += 1
+        Image.fromarray(rgb).save(os.path.join(a.frames_dir, f"frame_{fc[0]:04d}.png"))
+        fc[0] += 1
+
+    # walk ALONG the navmesh path (routes around furniture), not straight at target
+    n = habnav.walk_path(hum, ctrl, pf, target, on_frame=on_frame, max_steps=a.max_steps)
 
     print(f"WALK_OK steps={n} start={start.round(2).tolist()} target={target.round(2).tolist()} "
           f"end={np.array(hum.base_pos).round(2).tolist()} frames={a.frames_dir}")

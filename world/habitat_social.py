@@ -58,11 +58,9 @@ def make_cfg(a):
 def main():
     a = parse_args()
     from PIL import Image
+    import habnav
     sim = habitat_sim.Simulator(make_cfg(a))
-    ns = habitat_sim.NavMeshSettings(); ns.set_defaults()
-    ns.agent_radius = 0.3; ns.agent_height = 1.4
-    sim.recompute_navmesh(sim.pathfinder, ns)
-    pf = sim.pathfinder
+    pf = habnav.setup_navmesh(sim)            # navmesh respects furniture
 
     # two spots ~1.6 m apart at the same floor height
     p0 = np.array(pf.snap_point(pf.get_random_navigable_point()))

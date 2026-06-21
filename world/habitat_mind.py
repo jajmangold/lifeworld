@@ -68,11 +68,9 @@ def main():
     os.makedirs(a.frames_dir, exist_ok=True)
     from PIL import Image
 
+    import habnav
     sim = habitat_sim.Simulator(make_cfg(a))
-    ns = habitat_sim.NavMeshSettings(); ns.set_defaults()
-    ns.agent_radius = 0.3; ns.agent_height = 1.4
-    sim.recompute_navmesh(sim.pathfinder, ns)
-    pf = sim.pathfinder
+    pf = habnav.setup_navmesh(sim)            # navmesh respects furniture
 
     # catalog of go-to objects from the scene's object managers: name -> positions
     catalog = {}
@@ -105,8 +103,7 @@ def main():
         st.rotation = quat_from_two_vectors(np.array([0.0, 0.0, -1.0]), d.astype(np.float64))
         sim.get_agent(0).set_state(st)
 
-    def walk_to(tpos, max_steps=160):
-        ctrl.reset(hum.base_transformation)
+    def walk_to(tpos, max_steps=220):
         # camera vantage: navigable point ~3m from the midpoint of the trip
         hp0 = np.array(hum.base_pos); mid = (hp0 + tpos) / 2
         eye, best = mid + np.array([3.0, 0, 0]), -1
@@ -117,23 +114,15 @@ def main():
                 if 2.0 < dd < 4.5 and dd > best:
                     best, eye = dd, c
         eye = eye + np.array([0, 1.5, 0])
-        steps = 0
-        while steps < max_steps:
-            diff = mn.Vector3(*tpos.tolist()) - hum.base_pos
-            if diff.length() < 0.4:
-                break
-            ctrl.calculate_walk_pose(diff)
-            pose = ctrl.get_pose()
-            joints, base, off = pose[:-16], pose[-16:], pose[-32:-16]
-            if np.array(off).sum() != 0:
-                vb = [mn.Vector4(base[i*4:(i+1)*4]) for i in range(4)]
-                vo = [mn.Vector4(off[i*4:(i+1)*4]) for i in range(4)]
-                hum.set_joint_transform(joints, mn.Matrix4(*vo), mn.Matrix4(*vb))
+
+        def on_frame():
             cam_aim(eye, np.array(hum.base_pos) + np.array([0, 0.85, 0]))
             rgb = np.asarray(sim.get_sensor_observations()["rgb"])[..., :3]
             Image.fromarray(rgb).save(os.path.join(a.frames_dir, f"frame_{fi[0]:04d}.png"))
-            fi[0] += 1; steps += 1
-        return steps
+            fi[0] += 1
+
+        # walk ALONG the navmesh path so the agent routes around furniture
+        return habnav.walk_path(hum, ctrl, pf, tpos, on_frame=on_frame, max_steps=max_steps)
 
     for tick in range(a.ticks):
         hp = np.array(hum.base_pos)
