@@ -109,6 +109,9 @@ def frame_camera(all_verts, framing="full", aspect=0.6667):
 def main():
     a = parse_args()
     os.makedirs(a.out_dir, exist_ok=True)
+    for old in os.listdir(a.out_dir):       # clear stale frames so ffmpeg can't mux them
+        if old.startswith("frame_") and old.endswith(".png"):
+            os.remove(os.path.join(a.out_dir, old))
     d = np.load(a.clip, allow_pickle=True)
     verts = np.asarray(d["verts"], dtype=np.float32)
     faces = np.asarray(d["faces"], dtype=np.int64)
