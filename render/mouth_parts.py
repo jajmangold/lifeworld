@@ -9,49 +9,55 @@ Returns (mverts (F,M,3), faces (T,3), colors (M,3) uint8) to render alongside th
 import numpy as np
 
 
-def build_mouth(verts, lip_idx, jaw_rad, drop_scale=0.06, width=0.5, y_drop=0.009, yaw_rad=0.0):
+def build_mouth(verts, lip_idx, jaw_rad, drop_scale=0.06, width=0.42, y_drop=0.009, yaw_rad=0.0):
+    """Mouth interior: a DARK recessed cavity (fills the void) + a subtle, dim, deeply
+    recessed upper-teeth strip + tongue. Deliberately not a bright white bar. The lower
+    teeth are folded into the cavity (a separate bright strip read as fake)."""
     F = verts.shape[0]
-    m0 = verts[0, lip_idx]
-    # anchor to the FRONT-MOST lip verts (actual lip surface), not the broad region's
-    # centroid (which spans chin->philtrum and sits too high/forward). y_drop lowers it
-    # a touch (the front-lip mean still skews slightly toward the upper lip).
-    front = m0[m0[:, 2] >= np.percentile(m0[:, 2], 75)]
-    cx = float(front[:, 0].mean()); cy = float(front[:, 1].mean()) - y_drop
-    hw = (float(front[:, 0].max()) - float(front[:, 0].min())) * 0.5 * width
-    zc = float(front[:, 2].mean()) - 0.010   # recess just behind the lip surface
-    d = np.clip(np.asarray(jaw_rad), 0, None) * drop_scale   # lower-group drop per frame
+    L = verts[:, lip_idx, :]                       # (F, n, 3)
+    # Anchor to verts that MOVE with the jaw (the lower lip / mouth) — the nose is the
+    # most-forward part of the lip region but doesn't move, so a "front-most" anchor put
+    # the teeth on the nose. Jaw-motion variance excludes the nose automatically.
+    var_y = L[:, :, 1].var(0)
+    move = var_y >= np.percentile(var_y, 65)
+    if move.sum() < 8:                             # fallback if little jaw motion in clip
+        move = L[0, :, 2] >= np.percentile(L[0, :, 2], 80)
+    sel = L[0, move]                               # rest positions of the moving lip verts
+    cx = float(sel[:, 0].mean())
+    cy = float(sel[:, 1].mean()) + 0.004 - y_drop  # ~mouth line (lower lip + small up)
+    zlip = float(sel[:, 2].mean())
+    hw = (float(sel[:, 0].max()) - float(sel[:, 0].min())) * 0.5 * width
+    d = np.clip(np.asarray(jaw_rad), 0, None) * drop_scale
 
     def quad(y0, y1, z, xw):
         return np.array([[cx - xw, y0, z], [cx + xw, y0, z],
                          [cx + xw, y1, z], [cx - xw, y1, z]], np.float32)
 
-    upper = quad(cy + 0.001, cy + 0.006, zc, hw)            # static upper teeth (small)
+    upper = quad(cy + 0.002, cy + 0.0055, zlip - 0.013, hw * 0.92)   # dim upper teeth, recessed
     MV = []
     for i in range(F):
         di = float(d[i])
-        lower = quad(cy - 0.006 - di, cy - 0.001 - di, zc, hw)        # lower teeth (drops)
-        tongue = quad(cy - 0.005 - di, cy - 0.001 - di, zc + 0.003, hw * 0.75)
-        back = quad(cy - 0.008 - di, cy + 0.008, zc - 0.010, hw * 1.05)  # dark interior
-        MV.append(np.concatenate([upper, lower, tongue, back], 0))
-    MV = np.stack(MV, 0).astype(np.float32)                 # (F, 16, 3)
+        tongue = quad(cy - 0.007 - di, cy - 0.001 - di, zlip - 0.018, hw * 0.7)
+        cavity = quad(cy - 0.010 - di, cy + 0.009, zlip - 0.024, hw * 1.0)   # dark, deepest
+        MV.append(np.concatenate([upper, tongue, cavity], 0))
+    MV = np.stack(MV, 0).astype(np.float32)                 # (F, 12, 3)
 
-    # rotate the (axis-aligned) parts about Y to match the head's yaw, around the mouth
-    # centre — otherwise on an angled head they face the camera and punch through the nose.
+    # rotate parts about Y around the mouth centre to track the head's yaw (else they
+    # face the camera on an angled head and clip through the nose/cheek).
     if yaw_rad:
         c, s = np.cos(yaw_rad), np.sin(yaw_rad)
-        dx = MV[..., 0] - cx; dz = MV[..., 2] - zc
+        dx = MV[..., 0] - cx; dz = MV[..., 2] - zlip
         MV[..., 0] = cx + c * dx + s * dz
-        MV[..., 2] = zc - s * dx + c * dz
+        MV[..., 2] = zlip - s * dx + c * dz
 
     faces = []
-    for g in range(4):
+    for g in range(3):
         b = g * 4
         faces += [[b, b + 1, b + 2], [b, b + 2, b + 3]]
     faces = np.array(faces, np.int64)
 
-    col = np.zeros((16, 3), np.uint8)
-    col[0:4] = [232, 230, 218]      # upper teeth
-    col[4:8] = [232, 230, 218]      # lower teeth
-    col[8:12] = [168, 88, 92]       # tongue
-    col[12:16] = [38, 16, 18]       # dark interior
+    col = np.zeros((12, 3), np.uint8)
+    col[0:4] = [188, 182, 168]      # upper teeth (dim, not bright white)
+    col[4:8] = [132, 70, 74]        # tongue
+    col[8:12] = [26, 11, 13]        # dark interior cavity
     return MV, faces, col

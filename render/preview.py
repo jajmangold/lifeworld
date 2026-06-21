@@ -90,7 +90,7 @@ def main():
     def render(fi):
         s = pyrender.Scene(bg_color=[0.05, 0.05, 0.07, 1.0], ambient_light=[0.4, 0.4, 0.42])
         s.add(build_mesh(verts[fi], faces, uv, tex))
-        if face["jaw"][fi, 0] > 0.05:        # only show teeth when the mouth is open
+        if face["jaw"][fi, 0] > 0.12:        # interior only when the mouth is clearly open
             mt = trimesh.Trimesh(mv[fi], mf, vertex_colors=mcol, process=False)
             s.add(pyrender.Mesh.from_trimesh(mt, smooth=False))
         s.add(cam, pose=cam_pose)

@@ -186,7 +186,7 @@ def main():
         for p in range(P):
             tex = tex_imgs[p % len(tex_imgs)] if tex_imgs else None
             scene.add(build_mesh(verts[p, fi], faces, uv, tex, a.flip_v))
-            if mverts is not None and mgate[p, fi] > 0.05:   # teeth/tongue when mouth open
+            if mverts is not None and mgate[p, fi] > 0.12:   # interior only when clearly open
                 mt = trimesh.Trimesh(mverts[p, fi], mfaces, vertex_colors=mcolors, process=False)
                 scene.add(pyrender.Mesh.from_trimesh(mt, smooth=False))
         scene.add(cam, pose=cam_pose)
