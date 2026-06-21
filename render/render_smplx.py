@@ -37,6 +37,8 @@ def parse_args():
     ap.add_argument("--bg", default="0.05,0.05,0.07")
     ap.add_argument("--no-ground", action="store_true", help="omit floor plane")
     ap.add_argument("--no-shadows", action="store_true", help="disable shadow maps")
+    ap.add_argument("--framing", default="full", choices=["full", "medium", "face"],
+                    help="shot size: full body / waist-up / head (for lip-sync)")
     return ap.parse_args()
 
 
@@ -80,17 +82,19 @@ def build_mesh(verts, faces, uv=None, tex_img=None, flip_v=False):
     return pyrender.Mesh.from_trimesh(tm, material=mat, smooth=True)
 
 
-def frame_camera(all_verts):
-    """Front camera that fits the whole motion (Y-up, looking down -Z)."""
+def frame_camera(all_verts, framing="full"):
+    """Front camera (Y-up, looking down -Z). Shot size set by `framing`."""
     lo = all_verts.reshape(-1, 3).min(0)
     hi = all_verts.reshape(-1, 3).max(0)
     center = (lo + hi) / 2.0
     height = float(hi[1] - lo[1])
     yfov = np.pi / 4.0
-    dist = (height * 0.62) / np.tan(yfov / 2.0) + 0.5
-    target = center.copy()
-    target[1] = lo[1] + 0.45 * height          # aim a touch low so feet/floor show
-    eye = np.array([center[0], center[1] + 0.10 * height, center[2] + dist])
+    # target height fraction (0=feet,1=head-top) and fit factor (smaller=closer)
+    tgt_frac, fit = {"full": (0.45, 0.62), "medium": (0.66, 0.40),
+                     "face": (0.90, 0.16)}[framing]
+    dist = (height * fit) / np.tan(yfov / 2.0) + 0.4
+    target = np.array([center[0], lo[1] + tgt_frac * height, center[2]])
+    eye = np.array([center[0], target[1] + 0.04 * height, center[2] + dist])
     return yfov, _aim(eye, target), center
 
 
@@ -118,7 +122,7 @@ def main():
     else:
         print("[render] clay (no texture)")
 
-    yfov, cam_pose, center = frame_camera(verts)
+    yfov, cam_pose, center = frame_camera(verts, a.framing)
     bg = [float(x) for x in a.bg.split(",")]
 
     cam = pyrender.PerspectiveCamera(yfov=yfov, aspectRatio=a.res_x / a.res_y)
