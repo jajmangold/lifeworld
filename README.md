@@ -7,8 +7,22 @@ Agents perceive a real 3D world through virtual sensors, decide with an LLM
 "neocortex", remember in a graph database, speak/hear, and act through embodied
 SMPL-X humanoids. Selected story beats are re-rendered in film-quality Blender.
 
-> Status: **bootstrap**. Architecture decided; first build = embodiment substrate
-> + a single SMPL-X human that works end-to-end (sim pose → cinematic render).
+> Status: **core vertical working** (validated 2026-06-21 on the V100 fleet). The full
+> loop runs end to end — see "What works" below.
+
+## What works (validated, all on sm_70 V100, headless)
+
+| Milestone | What runs | Artifact |
+|-----------|-----------|----------|
+| **M1** embodiment | `world/habitat_walk.py` — humanoid walks ReplicaCAD; RGB+depth+semantic sensors | `output/habitat_walk.mp4`, `M1_*.png` |
+| **M2** mind loop | `world/habitat_mind.py` — perceive → DeepSeek decides → navigate → log Neo4j | `output/mind.mp4` |
+| **M3 text** society | `mind/society.py` — personas + seeded conflict → DeepSeek storyline + FEELS graph | Neo4j storyline |
+| **M3 embodied** | `world/habitat_social.py` — two humanoids co-present + logged conversation | `output/social_twoshot.png` |
+| **Capstone** | `render/make_talk.sh "<line>"` — a Neo4j storyline line → lip-synced SMPL-X clip | `output/beat_mara_confront.mp4` |
+| **Render core** | `render/render_smplx.py` — Blender-free GPU SMPL-X (pyrender/EGL) | `output/walk.mp4` |
+
+Run the embodied/mind/social pieces in `lifeworld-habitat` with `--network host` +
+`-e DEEPSEEK_API_KEY -e NEO4J_PASSWORD` and `/mnt/24tb/habitat` mounted. See `docs/DECISIONS.md`.
 
 ## Why this shape (hardware reality)
 
