@@ -40,8 +40,8 @@ def parse_args():
     ap.add_argument("--bg", default="0.05,0.05,0.07")
     ap.add_argument("--no-ground", action="store_true", help="omit floor plane")
     ap.add_argument("--no-shadows", action="store_true", help="disable shadow maps")
-    ap.add_argument("--framing", default="full", choices=["full", "medium", "face"],
-                    help="shot size: full body / waist-up / head (for lip-sync)")
+    ap.add_argument("--framing", default="full", choices=["full", "medium", "face", "head"],
+                    help="shot size: full body / waist-up / face+shoulders / head-only close-up")
     return ap.parse_args()
 
 
@@ -95,6 +95,12 @@ def frame_camera(all_verts, framing="full", aspect=0.6667):
     width = float(hi[0] - lo[0])
     yfov = np.pi / 4.0
     xfov = 2.0 * np.arctan(np.tan(yfov / 2.0) * aspect)
+    if framing == "head":                       # tight head-only close-up (lip-sync)
+        ty = float(hi[1]) - 0.12                # ~head centre
+        dist = 0.14 / np.tan(yfov / 2.0) + 0.05  # fit ~0.28 m tall
+        target = np.array([center[0], ty, center[2]])
+        eye = np.array([center[0], ty + 0.01, center[2] + dist])
+        return yfov, _aim(eye, target), center
     # target height fraction (0=feet,1=head-top) and fit factor (smaller=closer)
     tgt_frac, fit = {"full": (0.45, 0.62), "medium": (0.66, 0.40),
                      "face": (0.90, 0.16)}[framing]
