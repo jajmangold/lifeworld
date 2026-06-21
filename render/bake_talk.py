@@ -11,20 +11,21 @@ Run inside sampl:dev with PYTHONPATH=/work (sampl repo, so face/engine resolve):
         --frames 110 --gender female --model-dir /work/models --out /work/output/clip_talk.npz
 """
 import argparse
+import json
+import os
 import numpy as np
 import torch
 import smplx
 
-from face.talk import audio_to_face                       # sampl on PYTHONPATH
-try:
-    from face.talk import apply_blink                     # optional (unused for now)
-except Exception:
-    apply_blink = None
+from face.talk import audio_to_face, arkit_to_face, eyelid_upper_indices, apply_blink
 
 
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--audio", required=True)
+    ap.add_argument("--arkit", default=None,
+                    help="LAM ARKit-52 json (run lam on host first) -> learned visemes; "
+                         "falls back to amplitude jaw if absent")
     ap.add_argument("--frames", type=int, default=110)
     ap.add_argument("--fps", type=int, default=24)
     ap.add_argument("--gender", default="female")
@@ -48,7 +49,12 @@ def main():
     body_pose = torch.from_numpy(np.tile(rest.reshape(1, 63), (F, 1)))
     betas = torch.full((F, 10), float(a.shape))
 
-    face = audio_to_face(a.audio, F, a.fps)
+    if a.arkit and os.path.exists(a.arkit):
+        face = arkit_to_face(json.load(open(a.arkit)), F, a.fps)   # learned LAM visemes
+        src = "LAM/arkit"
+    else:
+        face = audio_to_face(a.audio, F, a.fps)                    # amplitude fallback
+        src = "amplitude-fallback"
     kw = dict(
         global_orient=torch.zeros((F, 3)),
         body_pose=body_pose,
@@ -60,9 +66,17 @@ def main():
     with torch.no_grad():
         verts = model(betas=betas, **kw).vertices.numpy().astype(np.float32)
     faces = model.faces.astype(np.int64)
+
+    # mesh-space blinks (SMPL-X has no eyelid joint): drop upper-lid verts per frame
+    try:
+        l_idx, r_idx = eyelid_upper_indices(model, np.full(10, float(a.shape), np.float32))
+        apply_blink(verts, l_idx, r_idx, face["blink_l"], face["blink_r"])
+        blinks = "on"
+    except Exception as e:
+        blinks = f"skipped ({e})"
+
     np.savez_compressed(a.out, verts=verts, faces=faces, rot_x=0.0)
-    print(f"[bake_talk] {a.out}  verts={verts.shape} frames={F} "
-          f"face_keys={list(face.keys())}")
+    print(f"[bake_talk] {a.out}  verts={verts.shape} frames={F} face={src} blinks={blinks}")
 
 
 if __name__ == "__main__":

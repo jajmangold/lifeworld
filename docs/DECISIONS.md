@@ -54,3 +54,32 @@ interactions / tactile experiments, feeding SMPL-X poses back to the render path
 open world on Genesis — a reference if a full physics-substrate migration is ever
 warranted.
 **Open:** V100/sm_70 support for Genesis is unverified; validate before relying on it.
+
+## ADR-0006 — Lip-sync: LAM Audio2Expression is the SMPL-X path (A2F-3D is NOT installed)
+**Status:** accepted
+**Context:** A full-drive review (2026-06-21) found **no NVIDIA Audio2Face-3D install** anywhere
+(despite prior belief it had been tried). What IS present and live: **LAM_A2E** (:8202,
+audio→ARKit-52, ~0.15s), **KDTalker** (:8200, portrait→2D talking-head video), **ACE-Step**
+(music/TTS), **Higgs-TTS** (:8055). **TalkSHOW** exists but is code-only/stale (2023).
+**Decision:** For SMPL-X (in-engine) lip-sync, use **LAM_A2E → `face.talk.arkit_to_face`**
+(learned jawOpen visemes + real eye blinks), called from the host (the render container can't
+reach :8202). The amplitude-jaw `audio_to_face` is the offline fallback. **KDTalker** is reserved
+for 2D talking-head *video* shots. **Audio2Face-3D vertex-drive** stays the optional future upgrade
+(better visemes; SMPL-X FLAME expression PCs are too weak alone).
+
+## ADR-0007 — ProtoMotions as the physics-embodiment bridge (for ADR-0005)
+**Status:** accepted (validate next)
+**Context:** The review found **ProtoMotions** (`/mnt/24tb/containers-archive/charbrain/ProtoMotions`)
+— a SMPL character-control harness with built-in adapters for **Genesis / MuJoCo / IsaacGym /
+IsaacLab / Newton**. This is a ready-made SMPL→physics bridge.
+**Decision:** When pursuing the ADR-0005 physics/touch track, build on ProtoMotions rather than
+hand-rolling SMPL↔sim. Target Genesis or MuJoCo on the V100 fleet (no RT cores needed).
+**Open:** underlying sims (Genesis/MuJoCo) are not installed; ProtoMotions is code-only. Validate.
+
+## ADR-0008 — Habitat is a fresh install; Replica scene data already present
+**Status:** noted (amends ADR-0001)
+**Context:** Review confirms **habitat-lab / habitat-sim are NOT installed** — only Replica scene
+data exists (`/srv/nvme-data/containers/live/homebuilder/replica_out`). No HM3D/HSSD/ReplicaCAD.
+**Consequence:** M1 (issue #3) is a genuine fresh build. Also available as a *2D/video* render
+alternative: the **`wan2gp` arsenal** (`/mnt/24tb/containers-archive/wan2gp`) — Wan2.1 InfiniteTalk
+(audio→talking video), LTX-2.3-22B, Flux2-Klein, Z-Image-Turbo, wav2vec, depth-anything, RIFE.
