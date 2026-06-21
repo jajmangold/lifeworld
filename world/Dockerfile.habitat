@@ -38,4 +38,7 @@ RUN printf '%s\n' '{"file_format_version":"1.0.0","ICD":{"library_path":"libEGL_
         > /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 ENV NVIDIA_DRIVER_CAPABILITIES=all
 
+# M2 mind loop deps: Neo4j driver (brain uses stdlib urllib for DeepSeek)
+RUN /opt/conda/bin/pip install --no-cache-dir neo4j==5.26.0
+
 WORKDIR /work
