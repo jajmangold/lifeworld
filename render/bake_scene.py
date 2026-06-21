@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""Bake a multi-character talking SCENE to one (P,F,V,3) SMPL-X clip.
+
+Reads a JSON spec: characters (gender/betas/position/facing) + beats (who speaks,
+their TTS wav + LAM arkit). Builds a shared timeline: every character is present the
+whole time in a standing A-pose at their spot; a character's face lip-syncs only
+during the beats they speak (neutral + idle gaze otherwise). Output feeds
+render_smplx.py (multi-person, per-body textures). CPU; run in sampl:dev with
+PYTHONPATH=/work (sampl) so face.talk resolves.
+
+  $SAMPL_VENV/bin/python /lw/render/bake_scene.py --config scene.json --out clip.npz
+"""
+import argparse
+import json
+import numpy as np
+import torch
+import smplx
+
+from face.talk import arkit_to_face, _gaze_channels
+
+
+def apose():
+    r = np.zeros((1, 21, 3), np.float32)
+    r[0, 15] = [0.0, 0.0, -1.0]      # shoulders down out of T-pose
+    r[0, 16] = [0.0, 0.0, 1.0]
+    return r.reshape(1, 63)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", required=True)
+    ap.add_argument("--model-dir", default="/work/models")
+    ap.add_argument("--out", required=True)
+    a = ap.parse_args()
+    cfg = json.load(open(a.config))
+    fps = cfg.get("fps", 24)
+    chars = cfg["characters"]
+    beats = cfg["beats"]
+
+    # per-beat frame counts from each arkit clip's duration
+    beat_arkit, beat_F = [], []
+    for b in beats:
+        ak = json.load(open(b["arkit"]))
+        T = len(ak["weights"]); src = float(ak.get("fps", 30.0))
+        Fb = max(1, round((T / src) * fps))
+        beat_arkit.append(ak); beat_F.append(Fb)
+    total_F = sum(beat_F)
+    print(f"[bake_scene] {len(chars)} chars, {len(beats)} beats, {total_F} frames @ {fps}fps")
+
+    body0 = apose()
+    all_verts = []
+    for ci, ch in enumerate(chars):
+        jaw = np.zeros((total_F, 3), np.float32)
+        expr = np.zeros((total_F, 10), np.float32)
+        leye, reye = _gaze_channels(total_F, seed=ci)      # idle gaze throughout
+        off = 0
+        for bi, b in enumerate(beats):
+            Fb = beat_F[bi]
+            if b["speaker"] == ci:
+                f = arkit_to_face(beat_arkit[bi], Fb, fps)
+                jaw[off:off + Fb] = f["jaw"]
+                expr[off:off + Fb] = f["expression"]
+                leye[off:off + Fb] = f["leye"]
+                reye[off:off + Fb] = f["reye"]
+            off += Fb
+
+        g = ch.get("gender", "neutral")
+        model = smplx.create(a.model_dir, model_type="smplx", gender=g, num_betas=10,
+                             use_pca=False, flat_hand_mean=True, batch_size=total_F)
+        betas = np.zeros((1, 10), np.float32)
+        bv = np.asarray(ch.get("betas", []), np.float32)
+        betas[0, :min(10, len(bv))] = bv[:10]
+        yaw = np.radians(ch.get("yaw_deg", 0.0))
+        x, z = ch.get("pos", [0.0, 0.0])
+        kw = dict(
+            betas=torch.from_numpy(np.tile(betas, (total_F, 1))),
+            global_orient=torch.from_numpy(np.tile([[0.0, yaw, 0.0]], (total_F, 1)).astype(np.float32)),
+            body_pose=torch.from_numpy(np.tile(body0, (total_F, 1))),
+            transl=torch.from_numpy(np.tile([[x, 0.0, z]], (total_F, 1)).astype(np.float32)),
+            jaw_pose=torch.from_numpy(jaw), expression=torch.from_numpy(expr),
+            leye_pose=torch.from_numpy(leye), reye_pose=torch.from_numpy(reye),
+        )
+        with torch.no_grad():
+            v = model(**kw).vertices.numpy().astype(np.float32)
+        all_verts.append(v)
+        print(f"  {ch['name']}: gender={g} pos=({x},{z}) yaw={ch.get('yaw_deg',0)}")
+
+    verts = np.stack(all_verts, 0)                          # (P, F, V, 3)
+    faces = smplx.create(a.model_dir, model_type="smplx", gender="neutral").faces.astype(np.int64)
+    np.savez_compressed(a.out, verts=verts, faces=faces, rot_x=0.0,
+                        beat_frames=np.array(beat_F))
+    print(f"[bake_scene] wrote {a.out} verts={verts.shape}")
+
+
+if __name__ == "__main__":
+    main()

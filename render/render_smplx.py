@@ -28,6 +28,9 @@ def parse_args():
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--uv", default=None)
     ap.add_argument("--texture", default=None)
+    ap.add_argument("--textures", default=None,
+                    help="comma list of per-body textures (one per person); "
+                         "overrides --texture for multi-character scenes")
     ap.add_argument("--res-x", type=int, default=720)
     ap.add_argument("--res-y", type=int, default=1080)
     ap.add_argument("--rot-x", type=float, default=0.0,
@@ -82,17 +85,22 @@ def build_mesh(verts, faces, uv=None, tex_img=None, flip_v=False):
     return pyrender.Mesh.from_trimesh(tm, material=mat, smooth=True)
 
 
-def frame_camera(all_verts, framing="full"):
-    """Front camera (Y-up, looking down -Z). Shot size set by `framing`."""
+def frame_camera(all_verts, framing="full", aspect=0.6667):
+    """Front camera (Y-up, looking down -Z). Shot size set by `framing`. Fits BOTH
+    height and width (so a row of characters isn't cropped at the sides)."""
     lo = all_verts.reshape(-1, 3).min(0)
     hi = all_verts.reshape(-1, 3).max(0)
     center = (lo + hi) / 2.0
     height = float(hi[1] - lo[1])
+    width = float(hi[0] - lo[0])
     yfov = np.pi / 4.0
+    xfov = 2.0 * np.arctan(np.tan(yfov / 2.0) * aspect)
     # target height fraction (0=feet,1=head-top) and fit factor (smaller=closer)
     tgt_frac, fit = {"full": (0.45, 0.62), "medium": (0.66, 0.40),
                      "face": (0.90, 0.16)}[framing]
-    dist = (height * fit) / np.tan(yfov / 2.0) + 0.4
+    dist_h = (height * fit) / np.tan(yfov / 2.0)
+    dist_w = (width * 0.62) / np.tan(xfov / 2.0)     # keep the whole row in frame
+    dist = max(dist_h, dist_w) + 0.4
     target = np.array([center[0], lo[1] + tgt_frac * height, center[2]])
     eye = np.array([center[0], target[1] + 0.04 * height, center[2] + dist])
     return yfov, _aim(eye, target), center
@@ -113,16 +121,21 @@ def main():
         for p in range(P):
             verts[p] = (R[:3, :3] @ verts[p].reshape(-1, 3).T).T.reshape(F, -1, 3)
 
-    uv = tex_img = None
-    if a.uv and a.texture and os.path.exists(a.uv) and os.path.exists(a.texture):
-        with np.load(a.uv) as u:
-            uv = u["uv_coordinates"]
-        tex_img = Image.open(a.texture).convert("RGB")
-        print(f"[render] textured: uv={uv.shape} tex={tex_img.size}")
-    else:
+    uv = None
+    tex_imgs = []                     # one per person (cycled if fewer than P)
+    if a.uv and os.path.exists(a.uv):
+        paths = ([p for p in a.textures.split(",")] if a.textures
+                 else ([a.texture] if a.texture else []))
+        paths = [p for p in paths if p and os.path.exists(p)]
+        if paths:
+            with np.load(a.uv) as u:
+                uv = u["uv_coordinates"]
+            tex_imgs = [Image.open(p).convert("RGB") for p in paths]
+            print(f"[render] textured: uv={uv.shape} {len(tex_imgs)} texture(s)")
+    if not tex_imgs:
         print("[render] clay (no texture)")
 
-    yfov, cam_pose, center = frame_camera(verts, a.framing)
+    yfov, cam_pose, center = frame_camera(verts, a.framing, a.res_x / a.res_y)
     bg = [float(x) for x in a.bg.split(",")]
 
     cam = pyrender.PerspectiveCamera(yfov=yfov, aspectRatio=a.res_x / a.res_y)
@@ -147,7 +160,8 @@ def main():
         if ground is not None:
             scene.add(ground)
         for p in range(P):
-            scene.add(build_mesh(verts[p, fi], faces, uv, tex_img, a.flip_v))
+            tex = tex_imgs[p % len(tex_imgs)] if tex_imgs else None
+            scene.add(build_mesh(verts[p, fi], faces, uv, tex, a.flip_v))
         scene.add(cam, pose=cam_pose)
         for lt, pose in lights:
             scene.add(lt, pose=pose)
