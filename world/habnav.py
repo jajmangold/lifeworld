@@ -11,6 +11,17 @@ between consecutive waypoints stays on walkable floor.
 import habitat_sim
 import magnum as mn
 import numpy as np
+from habitat_sim.utils.common import quat_from_magnum
+
+
+def look_at_rot(eye, target, up=(0.0, 1.0, 0.0)):
+    """Roll-free camera rotation: orients the sensor's -Z at `target` with world up.
+    (quat_from_two_vectors aligns only the view dir and lets roll drift -> tilted shots.)"""
+    m = mn.Matrix4.look_at(
+        mn.Vector3(*np.asarray(eye, float).tolist()),
+        mn.Vector3(*np.asarray(target, float).tolist()),
+        mn.Vector3(*up))
+    return quat_from_magnum(mn.Quaternion.from_matrix(m.rotation()))
 
 
 def setup_navmesh(sim, radius=0.3, height=1.4):
@@ -21,6 +32,51 @@ def setup_navmesh(sim, radius=0.3, height=1.4):
     ns.include_static_objects = True          # <-- furniture becomes navmesh obstacles
     sim.recompute_navmesh(sim.pathfinder, ns)
     return sim.pathfinder
+
+
+def obstacle_footprints(sim, y_lo=0.25, y_hi=1.6, min_area=0.10):
+    """XZ footprints of furniture that occupies the torso/head band. The navmesh only
+    clears furniture *legs* (foot level); a table TOP overhangs floor the navmesh still
+    calls walkable, so a standing body clips it. These footprints let us also keep
+    placements out from UNDER overhangs."""
+    fps = []
+    for mgr in (sim.get_rigid_object_manager(), sim.get_articulated_object_manager()):
+        for h in mgr.get_object_handles():
+            try:
+                node = mgr.get_object_by_handle(h).root_scene_node
+                wbb = habitat_sim.geo.get_transformed_bb(
+                    node.cumulative_bb, node.absolute_transformation())
+                lo, hi = wbb.min, wbb.max
+            except Exception:
+                continue
+            if hi[1] < y_lo or lo[1] > y_hi:          # not in body band
+                continue
+            if (hi[0] - lo[0]) * (hi[2] - lo[2]) < min_area:   # ignore small clutter
+                continue
+            fps.append((float(lo[0]), float(hi[0]), float(lo[2]), float(hi[2])))
+    return fps
+
+
+def is_clear(p, fps, margin=0.22):
+    x, z = float(p[0]), float(p[2])
+    for x0, x1, z0, z1 in fps:
+        if x0 - margin <= x <= x1 + margin and z0 - margin <= z <= z1 + margin:
+            return False
+    return True
+
+
+def clear_navpoint(pf, fps, near=None, lo=0.0, hi=99.0, tries=400):
+    """A navigable point that is also clear of furniture footprints (no body clipping)."""
+    for _ in range(tries):
+        c = np.array(pf.snap_point(pf.get_random_navigable_point()), float)
+        if not np.all(np.isfinite(c)) or not is_clear(c, fps):
+            continue
+        if near is not None:
+            d = np.linalg.norm((c - np.asarray(near, float))[[0, 2]])
+            if not (lo <= d <= hi):
+                continue
+        return c
+    return None
 
 
 def geodesic(pf, start, end):

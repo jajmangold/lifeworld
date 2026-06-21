@@ -58,24 +58,55 @@ def make_cfg(a):
     return habitat_sim.Configuration(bk, [ag])
 
 
-def find_cluster(pf, n, radius):
-    """A centre with `n` navigable, non-furniture member spots evenly around it."""
+def _visible_heads(sim, eye, heads):
+    vis = 0
+    for hd in heads:
+        v = hd - eye; L = float(np.linalg.norm(v)); v = v / (L + 1e-9)
+        ray = habitat_sim.geo.Ray(mn.Vector3(*eye.tolist()), mn.Vector3(*v.tolist()))
+        res = sim.cast_ray(ray)
+        if (not res.has_hits()) or res.hits[0].ray_distance >= L - 0.5:
+            vis += 1
+    return vis
+
+
+def find_cluster(sim, pf, n, radius, fps):
+    """Find a conversation spot AND a camera that can see everyone. Returns
+    (centre, [member spots], camera_eye). Couples both searches so the group never
+    lands where it can't be filmed (cramped corner -> mutual occlusion)."""
     angles = [2 * np.pi * i / n for i in range(n)]
-    for _ in range(400):
+    best = None  # (visible_count, centre, spots, eye) fallback if no perfect shot
+    for _ in range(300):
         c = np.array(pf.snap_point(pf.get_random_navigable_point()))
-        if not np.all(np.isfinite(c)):
+        if not np.all(np.isfinite(c)) or not habnav.is_clear(c, fps):
             continue
         spots, ok = [], True
         for ang in angles:
             p = c + np.array([radius * np.cos(ang), 0, radius * np.sin(ang)])
             sp = np.array(pf.snap_point(mn.Vector3(*p.tolist())))
             if (not np.all(np.isfinite(sp)) or abs(sp[1] - c[1]) > 0.1
-                    or np.linalg.norm((sp - p)[[0, 2]]) > 0.25):
+                    or np.linalg.norm((sp - p)[[0, 2]]) > 0.2
+                    or not habnav.is_clear(sp, fps)):
                 ok = False; break
             spots.append(sp)
-        if ok:
-            return c, spots
-    return None, None
+        if not ok:
+            continue
+        heads = [sp + np.array([0, 1.45, 0]) for sp in spots]
+        for _ in range(120):                       # look for a camera seeing all heads
+            cand = np.array(pf.get_random_navigable_point())
+            if abs(cand[1] - c[1]) > 0.2 or not habnav.is_clear(cand, fps):
+                continue
+            d = np.linalg.norm((cand - c)[[0, 2]])
+            if not (2.0 < d < 3.6):
+                continue
+            eye = cand + np.array([0, 1.55, 0])
+            vis = _visible_heads(sim, eye, heads)
+            if vis == n:
+                return c, spots, eye
+            if best is None or vis > best[0]:
+                best = (vis, c, spots, eye)
+    if best is not None:
+        return best[1], best[2], best[3]
+    return None, None, None
 
 
 def main():
@@ -85,7 +116,9 @@ def main():
     pf = habnav.setup_navmesh(sim)
     cast = CAST[:max(2, min(len(CAST), 3))]
 
-    centre, spots = find_cluster(pf, len(cast), a.radius)
+    fps = habnav.obstacle_footprints(sim)         # furniture body-band footprints
+    print(f"[social] {len(fps)} furniture footprints to avoid")
+    centre, spots, eye = find_cluster(sim, pf, len(cast), a.radius, fps)
     if centre is None:
         print("CLUSTER_FAIL: no open space found"); sim.close(); return
 
@@ -119,22 +152,11 @@ def main():
 
     # camera: closest clear navigable spot ~2.2-3.0 m out, slight 3/4 downward, so the
     # group fills the frame and reads as a conversation
-    eye = None; best = 1e9
-    for _ in range(400):
-        cand = np.array(pf.get_random_navigable_point())
-        if abs(cand[1] - centre[1]) > 0.2:
-            continue
-        d = np.linalg.norm((cand - centre)[[0, 2]])
-        if 2.2 < d < 3.0 and d < best:
-            best, eye = d, cand
-    if eye is None:
-        eye = centre + np.array([2.5, 0, 0])
-    eye = eye + np.array([0, 1.65, 0])                 # slightly above head height
-    look = centre + np.array([0, 0.95, 0])
-    dd = look - eye; dd /= (np.linalg.norm(dd) + 1e-9)
+    # camera (verified by find_cluster to see the group), aimed roll-free at centre
+    look = centre + np.array([0, 1.0, 0])
     st = sim.get_agent(0).get_state()
     st.position = eye.astype(np.float32)
-    st.rotation = quat_from_two_vectors(np.array([0.0, 0.0, -1.0]), dd.astype(np.float64))
+    st.rotation = habnav.look_at_rot(eye, look)
     sim.get_agent(0).set_state(st)
     rgb = np.asarray(sim.get_sensor_observations()["rgb"])[..., :3]
     Image.fromarray(rgb).save(a.out)

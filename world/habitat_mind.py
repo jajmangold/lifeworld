@@ -110,10 +110,9 @@ def main():
         return None
 
     def cam_aim(eye, look):
-        d = (look - eye); d /= (np.linalg.norm(d) + 1e-9)
         st = sim.get_agent(0).get_state()
         st.position = eye.astype(np.float32)
-        st.rotation = quat_from_two_vectors(np.array([0.0, 0.0, -1.0]), d.astype(np.float64))
+        st.rotation = habnav.look_at_rot(eye, look)    # roll-free
         sim.get_agent(0).set_state(st)
 
     def walk_to(tpos, max_steps=220):
