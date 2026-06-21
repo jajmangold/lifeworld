@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""M3 (embodied): TWO humanoids stand together in ReplicaCAD and have a logged
-conversation. Bridges the text society (mind/society.py) to the embodied world:
-two NPCs co-present in a real scene, dialogue driven by DeepSeek and written to
-Neo4j, rendered as a two-shot. Headless on V100.
+"""M3 (embodied, multi-character): N humanoids stand in a coherent conversation
+cluster in ReplicaCAD and talk to each other; dialogue logged to Neo4j, rendered
+as a group shot. Each agent is placed on open floor facing the group's centre, so
+the scene reads as people actually talking together (not scattered/clipping).
 
-Run in lifeworld-habitat: --network host (Neo4j+DeepSeek) --gpus device=N
+Run in lifeworld-habitat: --network host --gpus device=N
 -e DEEPSEEK_API_KEY -e NEO4J_PASSWORD, /data + repo mounted.
 """
 import argparse
-import os
 import sys
 import numpy as np
 
@@ -21,14 +20,17 @@ from habitat.articulated_agents.humanoids import kinematic_humanoid
 from habitat.articulated_agent_controllers.humanoid_rearrange_controller import (
     HumanoidRearrangeController,
 )
+import habnav
 from mind.brain import decide
 from memory.graph import Memory
 
 CAST = [
     {"name": "Mara", "urdf": "female_0", "persona": "tidy, anxious, protective of her food"},
     {"name": "Theo", "urdf": "male_0", "persona": "easygoing, forgetful musician, conflict-averse"},
+    {"name": "Priya", "urdf": "female_1", "persona": "blunt, funny, the peacemaker"},
 ]
-SCENE = "Mara just found her labeled leftovers missing from the fridge; Theo wanders in."
+SCENE = ("Saturday morning in the shared apartment. Mara just found her labeled "
+         "leftovers gone from the fridge; the three roommates end up talking it out.")
 
 
 def parse_args():
@@ -36,9 +38,10 @@ def parse_args():
     ap.add_argument("--scene-dataset", required=True)
     ap.add_argument("--scene", default="apt_0")
     ap.add_argument("--humanoids-root", required=True)
-    ap.add_argument("--out", default="/work/output/social_twoshot.png")
-    ap.add_argument("--turns", type=int, default=4)
-    ap.add_argument("--res", type=int, nargs=2, default=[600, 800])
+    ap.add_argument("--out", default="/work/output/social_group.png")
+    ap.add_argument("--rounds", type=int, default=2)
+    ap.add_argument("--radius", type=float, default=0.95)
+    ap.add_argument("--res", type=int, nargs=2, default=[720, 960])
     return ap.parse_args()
 
 
@@ -55,68 +58,79 @@ def make_cfg(a):
     return habitat_sim.Configuration(bk, [ag])
 
 
+def find_cluster(pf, n, radius):
+    """A centre with `n` navigable, non-furniture member spots evenly around it."""
+    angles = [2 * np.pi * i / n for i in range(n)]
+    for _ in range(400):
+        c = np.array(pf.snap_point(pf.get_random_navigable_point()))
+        if not np.all(np.isfinite(c)):
+            continue
+        spots, ok = [], True
+        for ang in angles:
+            p = c + np.array([radius * np.cos(ang), 0, radius * np.sin(ang)])
+            sp = np.array(pf.snap_point(mn.Vector3(*p.tolist())))
+            if (not np.all(np.isfinite(sp)) or abs(sp[1] - c[1]) > 0.1
+                    or np.linalg.norm((sp - p)[[0, 2]]) > 0.25):
+                ok = False; break
+            spots.append(sp)
+        if ok:
+            return c, spots
+    return None, None
+
+
 def main():
     a = parse_args()
     from PIL import Image
-    import habnav
     sim = habitat_sim.Simulator(make_cfg(a))
-    pf = habnav.setup_navmesh(sim)            # navmesh respects furniture
+    pf = habnav.setup_navmesh(sim)
+    cast = CAST[:max(2, min(len(CAST), 3))]
 
-    # two spots ~1.6 m apart at the same floor height
-    p0 = np.array(pf.snap_point(pf.get_random_navigable_point()))
-    p1 = None
-    for _ in range(300):
-        c = np.array(pf.get_random_navigable_point())
-        if 1.3 < np.linalg.norm((c - p0)[[0, 2]]) < 1.9 and abs(c[1] - p0[1]) < 0.1:
-            p1 = np.array(pf.snap_point(c)); break
-    if p1 is None:
-        p1 = p0 + np.array([1.6, 0, 0])
+    centre, spots = find_cluster(pf, len(cast), a.radius)
+    if centre is None:
+        print("CLUSTER_FAIL: no open space found"); sim.close(); return
 
-    def face_yaw(frm, to):
+    def yaw_to(frm, to):
         d = to - frm
-        return float(np.arctan2(d[0], d[2]))   # habitat base_rot about Y
+        return float(np.arctan2(d[0], d[2]))
 
-    hums = []
-    for cast, pos, look in ((CAST[0], p0, p1), (CAST[1], p1, p0)):
-        urdf = f"{a.humanoids_root}/{cast['urdf']}/{cast['urdf']}.urdf"
-        motion = f"{a.humanoids_root}/{cast['urdf']}/{cast['urdf']}_motion_data_smplx.pkl"
-        cfg = DictConfig({"articulated_agent_urdf": urdf, "motion_data_path": motion})
-        h = kinematic_humanoid.KinematicHumanoid(cfg, sim); h.reconfigure(); h.update()
+    for c, pos in zip(cast, spots):
+        urdf = f"{a.humanoids_root}/{c['urdf']}/{c['urdf']}.urdf"
+        motion = f"{a.humanoids_root}/{c['urdf']}/{c['urdf']}_motion_data_smplx.pkl"
+        h = kinematic_humanoid.KinematicHumanoid(
+            DictConfig({"articulated_agent_urdf": urdf, "motion_data_path": motion}), sim)
+        h.reconfigure(); h.update()
         h.base_pos = mn.Vector3(*pos.tolist())
         try:
-            h.base_rot = face_yaw(pos, look)
+            h.base_rot = yaw_to(pos, centre)          # face the group centre
         except Exception as e:
-            print("base_rot warn:", e)
-        # nudge out of T-pose into a natural stance via one controller pose
-        try:
+            print("rot warn:", e)
+        try:                                          # nudge out of T-pose
             ctrl = HumanoidRearrangeController(motion)
             ctrl.reset(h.base_transformation)
-            ctrl.calculate_walk_pose(mn.Vector3(*(look - pos).tolist()))
+            ctrl.calculate_walk_pose(mn.Vector3(*((centre - pos) * 0.3).tolist()))
             pose = ctrl.get_pose()
-            joints, base, off = pose[:-16], pose[-16:], pose[-32:-16]
-            if np.array(off).sum() != 0:
-                vb = [mn.Vector4(base[i*4:(i+1)*4]) for i in range(4)]
-                vo = [mn.Vector4(off[i*4:(i+1)*4]) for i in range(4)]
-                h.set_joint_transform(joints, mn.Matrix4(*vo), mn.Matrix4(*vb))
+            j, b, o = pose[:-16], pose[-16:], pose[-32:-16]
+            if np.array(o).sum() != 0:
+                vb = [mn.Vector4(b[i * 4:(i + 1) * 4]) for i in range(4)]
+                vo = [mn.Vector4(o[i * 4:(i + 1) * 4]) for i in range(4)]
+                h.set_joint_transform(j, mn.Matrix4(*vo), mn.Matrix4(*vb))
         except Exception as e:
             print("pose warn:", e)
-        hums.append(h)
 
-    # camera: perpendicular to the pair, framing both at chest height
-    mid = (p0 + p1) / 2
-    line = (p1 - p0); line[1] = 0; line /= (np.linalg.norm(line) + 1e-9)
-    perp = np.array([-line[2], 0, line[0]])
-    eye = None; best = -1
-    for s in (1, -1):
-        c = mid + perp * s * 2.6
-        if pf.is_navigable(mn.Vector3(*c.tolist())):
-            d = 2.6
-            if d > best:
-                best, eye = d, c
+    # camera: closest clear navigable spot ~2.2-3.0 m out, slight 3/4 downward, so the
+    # group fills the frame and reads as a conversation
+    eye = None; best = 1e9
+    for _ in range(400):
+        cand = np.array(pf.get_random_navigable_point())
+        if abs(cand[1] - centre[1]) > 0.2:
+            continue
+        d = np.linalg.norm((cand - centre)[[0, 2]])
+        if 2.2 < d < 3.0 and d < best:
+            best, eye = d, cand
     if eye is None:
-        eye = mid + perp * 2.6
-    eye = eye + np.array([0, 1.45, 0])
-    look = mid + np.array([0, 0.9, 0])
+        eye = centre + np.array([2.5, 0, 0])
+    eye = eye + np.array([0, 1.65, 0])                 # slightly above head height
+    look = centre + np.array([0, 0.95, 0])
     dd = look - eye; dd /= (np.linalg.norm(dd) + 1e-9)
     st = sim.get_agent(0).get_state()
     st.position = eye.astype(np.float32)
@@ -124,33 +138,41 @@ def main():
     sim.get_agent(0).set_state(st)
     rgb = np.asarray(sim.get_sensor_observations()["rgb"])[..., :3]
     Image.fromarray(rgb).save(a.out)
-    print(f"TWOSHOT saved {a.out} p0={p0.round(2).tolist()} p1={p1.round(2).tolist()}")
+    print(f"GROUP saved {a.out} centre={centre.round(2).tolist()} n={len(cast)}")
 
-    # dialogue between exactly these two, logged to Neo4j
+    # multi-party conversation, logged to Neo4j
     mem = Memory()
-    for c in CAST:
+    for c in cast:
         mem.ensure_agent(c["name"])
     with mem.drv.session() as s:
-        s.run("MATCH (u:Utterance {scene:'social'}) DETACH DELETE u")
-    transcript = []
-    for t in range(a.turns):
-        spk = CAST[t % 2]; other = CAST[(t + 1) % 2]
-        convo = "\n".join(f"{x['who']}: {x['say']}" for x in transcript[-6:])
-        out = decide(
-            f"You are {spk['name']}: {spk['persona']}. You're face to face with "
-            f"{other['name']} in your apartment. Brief, in-character. Reply ONLY JSON.",
-            f"SCENE: {SCENE}\nSo far:\n{convo or '(start)'}\nYour turn. "
-            '{"say":"<line>","do":"<action>","feeling":"<one word toward them>",'
-            '"sentiment":"<positive|neutral|negative>"}',
-            temperature=0.9)
-        transcript.append({"who": spk["name"], "say": out.get("say", "")})
-        mem.add_utterance(spk["name"], t, out.get("say", ""), out.get("do", ""), scene="social")
-        mem.set_feeling(spk["name"], other["name"], out.get("feeling", ""),
-                        out.get("sentiment", "neutral"))
-        print(f"  {spk['name']}: \"{out.get('say','')}\"  [{out.get('do','')}]")
-    mem.close()
-    sim.close()
-    print(f"SOCIAL_OK turns={a.turns}")
+        s.run("MATCH (u:Utterance {scene:'group'}) DETACH DELETE u")
+        s.run("MATCH (:Agent)-[r:FEELS]->(:Agent) DELETE r")
+    names = {c["name"] for c in cast}
+    transcript = []; t = 0
+    for _ in range(a.rounds):
+        for c in cast:
+            others = [x["name"] for x in cast if x["name"] != c["name"]]
+            convo = "\n".join(f"{x['who']}: {x['say']}" for x in transcript[-8:])
+            out = decide(
+                f"You are {c['name']}: {c['persona']}. You're in a room with {', '.join(others)}. "
+                "Brief, in-character, react to what was just said. Reply ONLY JSON.",
+                f"SCENE: {SCENE}\nSo far:\n{convo or '(start)'}\nYour turn. "
+                '{"say":"<line>","do":"<action>","toward":"<one name or empty>",'
+                '"feeling":"<one word>","sentiment":"<positive|neutral|negative>"}',
+                temperature=0.9)
+            transcript.append({"who": c["name"], "say": out.get("say", "")})
+            mem.add_utterance(c["name"], t, out.get("say", ""), out.get("do", ""), scene="group")
+            tw = str(out.get("toward", "")).strip()
+            if tw in names:
+                mem.set_feeling(c["name"], tw, out.get("feeling", ""), out.get("sentiment", "neutral"))
+            print(f"  {c['name']}: \"{out.get('say','')}\"  [{out.get('do','')}]")
+            t += 1
+
+    print("\n=== relationships (Neo4j) ===")
+    for r in mem.relationships():
+        print(f"  {r['a']} -> {r['b']}: {r['feeling']} ({r['sentiment']})")
+    mem.close(); sim.close()
+    print(f"SOCIAL_OK cast={len(cast)} turns={t}")
 
 
 if __name__ == "__main__":
