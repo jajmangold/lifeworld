@@ -72,6 +72,17 @@ reach :8202). The amplitude-jaw `audio_to_face` is the offline fallback. **KDTal
 for 2D talking-head *video* shots. **Audio2Face-3D vertex-drive** stays the optional future upgrade
 (better visemes; SMPL-X FLAME expression PCs are too weak alone).
 
+**A2F-3D-on-Volta validated (2026-06-21):** the official TensorRT path is out (TRT
+removed Volta/sm_70 in 10.5), BUT the model ships as ONNX and **runs on a CMP 100-210
+via ONNX Runtime CUDA EP** — full diffusion-v3 forward in ~909ms for 60 frames
+(faster than real-time). Model at `/mnt/24tb/a2f/network.onnx`; smoke test
+`world/a2f_smoke.py`. Inputs: window(B,16000)+identity(B,3)+emotion(B,30,10)+
+input_latents(2,2,B,256)+noise(B,3,60,88831); output geometry(B,60,88831) for
+identities Claire/James/Mark. **Integration TODO:** map A2F geometry output →
+ARKit-52 (via the bs_skin blendshape solve) → reuse our `arkit_to_face` path, OR
+use the Samples microservice ARKit output. Then A2F replaces LAM as the lip-sync
+engine on the CMP/V100 fleet (no RTX box required).
+
 ## ADR-0007 — ProtoMotions as the physics-embodiment bridge (for ADR-0005)
 **Status:** accepted (validate next)
 **Context:** The review found **ProtoMotions** (`/mnt/24tb/containers-archive/charbrain/ProtoMotions`)
