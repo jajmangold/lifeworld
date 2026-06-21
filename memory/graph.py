@@ -45,6 +45,39 @@ class Memory:
                 agent=agent, t=t, seen=seen, thought=thought,
                 target=target, place=place)
 
+    # --- society / storyline (M3) ---
+    def add_utterance(self, agent, turn, say, do, scene=None):
+        with self.drv.session() as s:
+            s.run(
+                """MERGE (a:Agent {name:$a})
+                   CREATE (u:Utterance {turn:$turn, say:$say, do:$do, scene:$scene})
+                   CREATE (a)-[:SAID]->(u)""",
+                a=agent, turn=turn, say=say, do=do, scene=scene)
+
+    def set_feeling(self, agent, toward, feeling, sentiment):
+        """Directed relationship capturing how `agent` feels about `toward` now."""
+        if not toward or toward == agent:
+            return
+        with self.drv.session() as s:
+            s.run(
+                """MERGE (a:Agent {name:$a}) MERGE (b:Agent {name:$b})
+                   MERGE (a)-[r:FEELS]->(b)
+                   SET r.feeling=$feeling, r.sentiment=$sentiment""",
+                a=agent, b=toward, feeling=feeling, sentiment=sentiment)
+
+    def transcript(self):
+        with self.drv.session() as s:
+            r = s.run("MATCH (a:Agent)-[:SAID]->(u:Utterance) "
+                      "RETURN a.name AS who, u.turn AS turn, u.say AS say, u.do AS do "
+                      "ORDER BY u.turn, who")
+            return [dict(x) for x in r]
+
+    def relationships(self):
+        with self.drv.session() as s:
+            r = s.run("MATCH (a:Agent)-[r:FEELS]->(b:Agent) "
+                      "RETURN a.name AS a, b.name AS b, r.feeling AS feeling, r.sentiment AS sentiment")
+            return [dict(x) for x in r]
+
     def life_story(self, agent):
         with self.drv.session() as s:
             r = s.run(
