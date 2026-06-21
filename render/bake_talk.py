@@ -17,8 +17,9 @@ import numpy as np
 import torch
 import smplx
 
-from face.talk import (audio_to_face, arkit_to_face, eyelid_upper_indices,
+from face.talk import (audio_to_face, eyelid_upper_indices,
                        apply_blink, lip_region, apply_lips)
+from face_drive import drive          # single coherent face driver
 
 
 def parse_args():
@@ -51,17 +52,15 @@ def main():
     betas = torch.full((F, 10), float(a.shape))
 
     if a.arkit and os.path.exists(a.arkit):
-        # gentle jaw (~13deg max) so it doesn't 'unhinge'; A2F jawOpen is clean/strong
-        face = arkit_to_face(json.load(open(a.arkit)), F, a.fps, jaw_max=0.17, jaw_gain=1.0)
-        src = "arkit"
+        face = drive(json.load(open(a.arkit)), F, a.fps)   # one coherent driver
+        src = "arkit(a2f/lam)"
     else:
-        face = audio_to_face(a.audio, F, a.fps)                    # amplitude fallback
+        face = audio_to_face(a.audio, F, a.fps)                          # offline amplitude fallback
         src = "amplitude-fallback"
-    kw = dict(
+    kw = dict(                                  # NO `expression` (inert on SMPL-X)
         global_orient=torch.zeros((F, 3)),
         body_pose=body_pose,
         jaw_pose=torch.from_numpy(face["jaw"]),
-        expression=torch.from_numpy(face["expression"]),
         leye_pose=torch.from_numpy(face["leye"]),
         reye_pose=torch.from_numpy(face["reye"]),
     )

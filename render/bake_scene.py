@@ -16,8 +16,9 @@ import numpy as np
 import torch
 import smplx
 
-from face.talk import (arkit_to_face, _gaze_channels, eyelid_upper_indices,
+from face.talk import (_gaze_channels, eyelid_upper_indices,
                        apply_blink, lip_region, apply_lips)
+from face_drive import drive          # single coherent face driver
 
 
 def apose():
@@ -52,23 +53,19 @@ def main():
     all_verts = []
     for ci, ch in enumerate(chars):
         jaw = np.zeros((total_F, 3), np.float32)
-        expr = np.zeros((total_F, 10), np.float32)
-        leye, reye = _gaze_channels(total_F, seed=ci)      # idle gaze throughout
+        leye, reye = _gaze_channels(total_F, seed=ci)      # ONE continuous gaze (never overwritten)
         mc = np.zeros(total_F, np.float32); mp = np.zeros(total_F, np.float32)
         bl = np.zeros(total_F, np.float32); br = np.zeros(total_F, np.float32)
         off = 0
         for bi, b in enumerate(beats):
             Fb = beat_F[bi]
-            if b["speaker"] == ci:
-                f = arkit_to_face(beat_arkit[bi], Fb, fps, jaw_max=0.17, jaw_gain=1.0)
+            if b["speaker"] == ci:                          # overlay only mouth/jaw/blink
+                f = drive(beat_arkit[bi], Fb, fps)
                 jaw[off:off + Fb] = f["jaw"]
-                expr[off:off + Fb] = f["expression"]
-                leye[off:off + Fb] = f["leye"]
-                reye[off:off + Fb] = f["reye"]
-                mc[off:off + Fb] = f.get("mouth_close", 0.0)
-                mp[off:off + Fb] = f.get("mouth_pucker", 0.0)
-                bl[off:off + Fb] = f.get("blink_l", 0.0)
-                br[off:off + Fb] = f.get("blink_r", 0.0)
+                mc[off:off + Fb] = f["mouth_close"]
+                mp[off:off + Fb] = f["mouth_pucker"]
+                bl[off:off + Fb] = f["blink_l"]
+                br[off:off + Fb] = f["blink_r"]
             off += Fb
 
         g = ch.get("gender", "neutral")
@@ -84,7 +81,7 @@ def main():
             global_orient=torch.from_numpy(np.tile([[0.0, yaw, 0.0]], (total_F, 1)).astype(np.float32)),
             body_pose=torch.from_numpy(np.tile(body0, (total_F, 1))),
             transl=torch.from_numpy(np.tile([[x, 0.0, z]], (total_F, 1)).astype(np.float32)),
-            jaw_pose=torch.from_numpy(jaw), expression=torch.from_numpy(expr),
+            jaw_pose=torch.from_numpy(jaw),             # no `expression` (inert on SMPL-X)
             leye_pose=torch.from_numpy(leye), reye_pose=torch.from_numpy(reye),
         )
         with torch.no_grad():

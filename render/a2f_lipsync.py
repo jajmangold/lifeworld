@@ -101,12 +101,9 @@ def run_one(sess, ins, a2f_dir, wav, out, identity, cache):
 
     W = np.concatenate(chunks, 0) * active[None, :]          # gate inactive poses
     W = W[LEAD_TRIM:LEAD_TRIM + max(1, round(dur * FPS))]    # drop lead + trim to audio (A/V sync)
-    # light temporal smoothing + clamp to ARKit [0,1]
-    k = 3
-    W = np.apply_along_axis(lambda v: np.convolve(np.pad(v, k // 2, "edge"),
-                                                  np.ones(k) / k, "valid")[:len(v)], 0, W)
-    # remove resting bias per channel so the face rests NEUTRAL (mouth closed) and
-    # only deviates during speech — fixes the chronically-open ("too wide") mouth.
+    # remove resting bias per channel so the face rests NEUTRAL (mouth closed) and only
+    # deviates during speech. NOTE: smoothing is intentionally NOT done here — the single
+    # smoothing stage lives in face_drive.drive() (avoids double low-pass / lag).
     W = W - np.percentile(W, 25, axis=0, keepdims=True)
     W = np.clip(W, 0.0, 1.0).astype(np.float32)
     jo = W[:, names.index("jawOpen")]
