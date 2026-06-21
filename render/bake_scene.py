@@ -60,7 +60,7 @@ def main():
         for bi, b in enumerate(beats):
             Fb = beat_F[bi]
             if b["speaker"] == ci:
-                f = arkit_to_face(beat_arkit[bi], Fb, fps, jaw_max=0.24, jaw_gain=1.1)
+                f = arkit_to_face(beat_arkit[bi], Fb, fps, jaw_max=0.17, jaw_gain=1.0)
                 jaw[off:off + Fb] = f["jaw"]
                 expr[off:off + Fb] = f["expression"]
                 leye[off:off + Fb] = f["leye"]

@@ -105,6 +105,9 @@ def run_one(sess, ins, a2f_dir, wav, out, identity, cache):
     k = 3
     W = np.apply_along_axis(lambda v: np.convolve(np.pad(v, k // 2, "edge"),
                                                   np.ones(k) / k, "valid")[:len(v)], 0, W)
+    # remove resting bias per channel so the face rests NEUTRAL (mouth closed) and
+    # only deviates during speech — fixes the chronically-open ("too wide") mouth.
+    W = W - np.percentile(W, 25, axis=0, keepdims=True)
     W = np.clip(W, 0.0, 1.0).astype(np.float32)
     jo = W[:, names.index("jawOpen")]
     mc = W[:, names.index("mouthClose")]

@@ -52,7 +52,7 @@ def main():
 
     if a.arkit and os.path.exists(a.arkit):
         # gentle jaw (~13deg max) so it doesn't 'unhinge'; A2F jawOpen is clean/strong
-        face = arkit_to_face(json.load(open(a.arkit)), F, a.fps, jaw_max=0.24, jaw_gain=1.1)
+        face = arkit_to_face(json.load(open(a.arkit)), F, a.fps, jaw_max=0.17, jaw_gain=1.0)
         src = "arkit"
     else:
         face = audio_to_face(a.audio, F, a.fps)                    # amplitude fallback
