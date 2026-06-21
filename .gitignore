@@ -1,0 +1,30 @@
+# secrets / local config
+.env
+*.local
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# data / models / large artifacts (license-gated or huge)
+data/
+models/
+scenes/
+output/
+*.npz
+*.npy
+*.glb
+*.mp4
+*.png
+*.jpg
+!docs/**/*.png
+
+# neo4j volume
+deploy/neo4j-data/
+deploy/neo4j-logs/
+
+# os
+.DS_Store

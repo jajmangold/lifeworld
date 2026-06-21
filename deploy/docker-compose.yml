@@ -1,0 +1,24 @@
+# lifeworld services. Brought up incrementally as layers land.
+# Today: the memory/society graph (Neo4j). Habitat world + mind services added per-milestone.
+#
+# Ports are offset from the existing n4j_atlas (7474/7687) to avoid collision.
+services:
+  memory:
+    image: neo4j:5.26-community
+    container_name: lifeworld-neo4j
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7475:7474"   # HTTP browser
+      - "127.0.0.1:7688:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD:-lifeworld-dev}"
+      NEO4J_server_memory_heap_max__size: "2G"
+      NEO4J_server_memory_pagecache_size: "1G"
+    volumes:
+      - ./neo4j-data:/data
+      - ./neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
