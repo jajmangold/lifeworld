@@ -23,11 +23,11 @@ FPS = 24
 # cast: row facing camera, angled slightly inward; distinct gender/shape/voice/texture
 CAST = [
     {"name": "Mara",  "gender": "female", "betas": [1.5, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-     "pos": [-0.85, 0.0], "yaw_deg": 22, "tex": "f", "voice": None,   "emotion": None},
+     "pos": [-0.85, 0.0], "yaw_deg": 22, "tex": "f", "voice": None},
     {"name": "Theo",  "gender": "male",   "betas": [0.5, 1.0, 0, 0, 0, 0, 0, 0, 0, 0],
-     "pos": [0.0, 0.25], "yaw_deg": 0,  "tex": "m", "voice": "male", "emotion": None},
+     "pos": [0.0, 0.25], "yaw_deg": 0,  "tex": "m", "voice": "male"},
     {"name": "Priya", "gender": "female", "betas": [-1.2, -0.5, 0, 0, 0, 0, 0, 0, 0, 0],
-     "pos": [0.9, 0.0],  "yaw_deg": -22, "tex": "f", "voice": None,  "emotion": "happy"},
+     "pos": [0.9, 0.0],  "yaw_deg": -22, "tex": "f", "voice": None},
 ]
 PERSONA = {"Mara": "tidy, anxious, protective of her food",
            "Theo": "easygoing, forgetful musician, sheepish",
@@ -49,9 +49,9 @@ def deepseek(system, user, temp=0.9):
     return json.loads(json.load(urllib.request.urlopen(req, timeout=60))["choices"][0]["message"]["content"])
 
 
-def tts(text, out_wav, voice=None, emotion=None):
-    if emotion:
-        text = f"<|emotion:{emotion}|> {text}"
+def tts(text, out_wav, voice=None):
+    # NOTE: this Higgs build does NOT interpret <|emotion:..|> tokens — it speaks them
+    # aloud — so we never prepend them. Voice variety comes from reference_audio only.
     body = {"input": text, "response_format": "wav"}
     if voice == "male":
         ref = f"{SAMPL}/assets/voices/male_ref.wav"
@@ -92,7 +92,7 @@ def main():
             transcript.append({"who": c["name"], "say": say})
             wav = f"{SCENE}/{c['name'].lower()}_{rnd}.wav"
             ak = f"{SCENE}/{c['name'].lower()}_{rnd}.arkit.json"
-            tts(say, wav, c["voice"], c["emotion"]); lam(wav, ak)
+            tts(say, wav, c["voice"]); lam(wav, ak)
             dur = wave.open(wav, "rb").getnframes() / wave.open(wav, "rb").getframerate()
             beats.append({"speaker": i, "audio": wav.replace(SAMPL, "/work"),
                           "arkit": ak.replace(SAMPL, "/work"), "wav_host": wav, "dur": dur})
