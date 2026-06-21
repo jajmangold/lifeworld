@@ -9,13 +9,14 @@ Returns (mverts (F,M,3), faces (T,3), colors (M,3) uint8) to render alongside th
 import numpy as np
 
 
-def build_mouth(verts, lip_idx, jaw_rad, drop_scale=0.06, width=0.5):
+def build_mouth(verts, lip_idx, jaw_rad, drop_scale=0.06, width=0.5, y_drop=0.009):
     F = verts.shape[0]
     m0 = verts[0, lip_idx]
     # anchor to the FRONT-MOST lip verts (actual lip surface), not the broad region's
-    # centroid (which spans chin->philtrum and sits too high/forward).
+    # centroid (which spans chin->philtrum and sits too high/forward). y_drop lowers it
+    # a touch (the front-lip mean still skews slightly toward the upper lip).
     front = m0[m0[:, 2] >= np.percentile(m0[:, 2], 75)]
-    cx = float(front[:, 0].mean()); cy = float(front[:, 1].mean())
+    cx = float(front[:, 0].mean()); cy = float(front[:, 1].mean()) - y_drop
     hw = (float(front[:, 0].max()) - float(front[:, 0].min())) * 0.5 * width
     zc = float(front[:, 2].mean()) - 0.010   # recess just behind the lip surface
     d = np.clip(np.asarray(jaw_rad), 0, None) * drop_scale   # lower-group drop per frame
