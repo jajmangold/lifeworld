@@ -83,6 +83,16 @@ ARKit-52 (via the bs_skin blendshape solve) → reuse our `arkit_to_face` path, 
 use the Samples microservice ARKit output. Then A2F replaces LAM as the lip-sync
 engine on the CMP/V100 fleet (no RTX box required).
 
+**A2F-3D INTEGRATED (2026-06-21):** `render/a2f_lipsync.py` (in `lifeworld-a2f` image)
+runs the A2F diffusion ONNX on a CMP/V100 via ORT and produces a LAM-compatible ARKit
+JSON ({arkit_names, weights, fps}) — drop-in for `face.talk.arkit_to_face` → SMPL-X.
+Bridge: the ONNX outputs per-vertex face-geometry DELTAS (network space); we project
+each frame onto `model_data.lip_open_pose_delta` / `eye_close_pose_delta` → normalized
+jawOpen + eyeBlink (no cross-space 52-blendshape solve needed). Wired into `scene_cine.py`
+(batched, one container session). Validated: cinematic 3-char scene, lip-sync tracks the
+active speaker. LAM remains the lightweight fallback. Mouth-shape detail beyond jaw
+(pucker/funnel) is a future add (needs the geometry→bs-space alignment).
+
 ## ADR-0007 — ProtoMotions as the physics-embodiment bridge (for ADR-0005)
 **Status:** accepted (validate next)
 **Context:** The review found **ProtoMotions** (`/mnt/24tb/containers-archive/charbrain/ProtoMotions`)

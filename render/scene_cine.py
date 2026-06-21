@@ -23,12 +23,13 @@ FPS = 24
 # cast: row facing camera, angled slightly inward; distinct gender/shape/voice/texture
 CAST = [
     {"name": "Mara",  "gender": "female", "betas": [1.5, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-     "pos": [-0.85, 0.0], "yaw_deg": 22, "tex": "f", "voice": None},
+     "pos": [-0.85, 0.0], "yaw_deg": 22, "tex": "f", "voice": None, "a2f_id": "Claire"},
     {"name": "Theo",  "gender": "male",   "betas": [0.5, 1.0, 0, 0, 0, 0, 0, 0, 0, 0],
-     "pos": [0.0, 0.25], "yaw_deg": 0,  "tex": "m", "voice": "male"},
+     "pos": [0.0, 0.25], "yaw_deg": 0,  "tex": "m", "voice": "male", "a2f_id": "Mark"},
     {"name": "Priya", "gender": "female", "betas": [-1.2, -0.5, 0, 0, 0, 0, 0, 0, 0, 0],
-     "pos": [0.9, 0.0],  "yaw_deg": -22, "tex": "f", "voice": None},
+     "pos": [0.9, 0.0],  "yaw_deg": -22, "tex": "f", "voice": None, "a2f_id": "Claire"},
 ]
+A2F_DIR = "/mnt/24tb/a2f"
 PERSONA = {"Mara": "tidy, anxious, protective of her food",
            "Theo": "easygoing, forgetful musician, sheepish",
            "Priya": "blunt, funny peacemaker"}
@@ -42,11 +43,23 @@ def deepseek(system, user, temp=0.9):
                          {"role": "user", "content": user}],
             "temperature": temp, "max_tokens": 200,
             "response_format": {"type": "json_object"}}
-    req = urllib.request.Request(f"{os.environ.get('DEEPSEEK_BASE_URL','https://api.deepseek.com')}/chat/completions",
-                                 data=json.dumps(body).encode(),
-                                 headers={"Content-Type": "application/json",
-                                          "Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}"})
-    return json.loads(json.load(urllib.request.urlopen(req, timeout=60))["choices"][0]["message"]["content"])
+    last = None
+    for _ in range(4):                       # DeepSeek occasionally returns an empty body
+        try:
+            req = urllib.request.Request(
+                f"{os.environ.get('DEEPSEEK_BASE_URL','https://api.deepseek.com')}/chat/completions",
+                data=json.dumps(body).encode(),
+                headers={"Content-Type": "application/json",
+                         "Authorization": f"Bearer {os.environ['DEEPSEEK_API_KEY']}"})
+            txt = json.load(urllib.request.urlopen(req, timeout=60))["choices"][0]["message"]["content"]
+            try:
+                return json.loads(txt)
+            except Exception:
+                s, e = txt.find("{"), txt.rfind("}")
+                return json.loads(txt[s:e + 1])
+        except Exception as ex:
+            last = ex
+    raise last
 
 
 def tts(text, out_wav, voice=None):
@@ -92,11 +105,23 @@ def main():
             transcript.append({"who": c["name"], "say": say})
             wav = f"{SCENE}/{c['name'].lower()}_{rnd}.wav"
             ak = f"{SCENE}/{c['name'].lower()}_{rnd}.arkit.json"
-            tts(say, wav, c["voice"]); lam(wav, ak)
+            tts(say, wav, c["voice"])       # lip-sync (A2F) batched below
             dur = wave.open(wav, "rb").getnframes() / wave.open(wav, "rb").getframerate()
             beats.append({"speaker": i, "audio": wav.replace(SAMPL, "/work"),
-                          "arkit": ak.replace(SAMPL, "/work"), "wav_host": wav, "dur": dur})
+                          "arkit": ak.replace(SAMPL, "/work"), "wav_host": wav,
+                          "a2f_id": c["a2f_id"], "dur": dur})
             print(f"  {c['name']}: {say}  ({dur:.1f}s)")
+
+    # 1b. Audio2Face-3D lip-sync for every line in ONE container session (CMP/V100, ORT)
+    manifest = f"{SCENE}/a2f_manifest.json"
+    json.dump([{"wav": b["audio"].replace("/work", "/asset"),
+                "out": b["arkit"].replace("/work", "/asset"),
+                "identity": b["a2f_id"]} for b in beats], open(manifest, "w"))
+    run(["docker", "run", "--rm", "--gpus", "device=1",
+         "-e", "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+         "-v", f"{SAMPL}:/asset", "-v", f"{BOT}:/lw", "-v", f"{A2F_DIR}:/a2f", "-w", "/lw",
+         "lifeworld-a2f", "python3", "render/a2f_lipsync.py", "--a2f", "/a2f",
+         "--manifest", "/asset/output/scene/a2f_manifest.json"])
 
     # 2. scene config for the baker
     chars = [{"name": c["name"], "gender": c["gender"], "betas": c["betas"],

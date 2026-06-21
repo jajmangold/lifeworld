@@ -1,0 +1,8 @@
+# Audio2Face-3D inference on Volta (sm_70) via ONNX Runtime CUDA EP.
+# TensorRT dropped Volta in 10.5; ORT's CUDA EP still supports it.
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip3 install --no-cache-dir numpy==1.26.4 onnxruntime-gpu==1.23.2
+WORKDIR /work
