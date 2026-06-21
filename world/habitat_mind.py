@@ -94,7 +94,20 @@ def main():
 
     mem = Memory(); mem.reset_agent(a.name)
     fi = [0]
-    visited = set()
+    last = None
+    needs = {"hunger": 0.45, "energy": 0.3, "leisure": 0.35}   # 0=sated, 1=urgent
+    SATISFY = {
+        "hunger": ["fridge", "counter", "cupboard", "cabinet", "food", "snack",
+                   "bowl", "plate", "pan", "kitchen"],
+        "energy": ["bed", "sofa", "couch", "beanbag", "stool", "chair", "rug"],
+        "leisure": ["tv", "monitor", "book", "clock", "picture", "bike", "lamp", "plant"],
+    }
+
+    def need_of(name):
+        for nd, kws in SATISFY.items():
+            if any(k in name for k in kws):
+                return nd
+        return None
 
     def cam_aim(eye, look):
         d = (look - eye); d /= (np.linalg.norm(d) + 1e-9)
@@ -124,45 +137,54 @@ def main():
         # walk ALONG the navmesh path so the agent routes around furniture
         return habnav.walk_path(hum, ctrl, pf, tpos, on_frame=on_frame, max_steps=max_steps)
 
+    import json
     for tick in range(a.ticks):
+        for k in needs:                        # needs grow over time
+            needs[k] = min(1.0, needs[k] + 0.12)
+        nshow = {k: round(v, 2) for k, v in needs.items()}
         hp = np.array(hum.base_pos)
         nearby = []
         for nm, ps in catalog.items():
-            if nm in visited:
+            if nm == last:                     # don't immediately re-pick the same thing
                 continue
             dmin = min(np.linalg.norm((p - hp)[[0, 2]]) for p in ps)
-            if 1.3 < dmin < 9.0:          # far enough to be worth walking to
+            if 1.3 < dmin < 9.0:
                 nearby.append((dmin, nm))
         nearby.sort()
         names = [nm for _, nm in nearby[:14]]
-        if not names:                      # nothing new in reach -> wander
+        if not names:
             tpos = np.array(pf.get_random_navigable_point())
             steps = walk_to(tpos)
-            mem.log_step(a.name, tick, "(nothing new nearby)", "wandering", "elsewhere")
-            print(f"[tick {tick}] nothing new -> wandered {steps} frames")
+            mem.log_step(a.name, tick, "(nothing new nearby)", "wandering", "elsewhere",
+                         needs=json.dumps(nshow))
+            print(f"[tick {tick}] needs={nshow} nothing new -> wandered {steps} frames")
             continue
+        urgent = max(needs, key=needs.get)
         out = decide(
             SYS.format(name=a.name),
-            f"Goal: {a.goal}. You are standing at {hp.round(1).tolist()}. You have already "
-            f"visited: {sorted(visited)}. Nearby NEW things you could walk to: {names}. "
-            "Pick ONE to walk to now. "
+            f"Your goal: {a.goal}. Your current needs (0=satisfied,1=urgent): {nshow} — "
+            f"your most pressing is '{urgent}'. You are at {hp.round(1).tolist()}. Things "
+            f"you could walk to now: {names}. Pick ONE that best addresses how you feel. "
             'Respond {"target":"<exact item from the list>","reason":"<short, first person>"}.')
-        target = str(out.get("target", names[0] if names else "")).lower()
+        target = str(out.get("target", names[0])).lower()
         reason = out.get("reason", "")
-        # match target back to catalog (exact, then substring)
         match = next((nm for nm in names if nm == target), None) \
             or next((nm for nm in names if target in nm or nm in target), None) \
-            or (names[0] if names else None)
-        if match is None:
-            break
+            or names[0]
         tpos = min(catalog[match], key=lambda p: np.linalg.norm((p - hp)[[0, 2]]))
         tpos = np.array(pf.snap_point(mn.Vector3(*tpos.tolist())))
         if not np.all(np.isfinite(tpos)):
             tpos = np.array(pf.get_random_navigable_point())
         steps = walk_to(tpos)
-        visited.add(match)
-        mem.log_step(a.name, tick, ", ".join(names[:8]), reason, match)
-        print(f"[tick {tick}] sees={names[:6]} -> '{match}' ({reason}) walked {steps} frames")
+        # arriving at a thing relieves the matching need
+        sat = need_of(match)
+        if sat:
+            needs[sat] = max(0.0, needs[sat] - 0.55)
+        last = match
+        mem.log_step(a.name, tick, ", ".join(names[:8]), reason, match,
+                     needs=json.dumps({k: round(v, 2) for k, v in needs.items()}))
+        print(f"[tick {tick}] needs={nshow} (urgent:{urgent}) -> '{match}' "
+              f"({reason}) [relieves {sat}] walked {steps} frames")
 
     print("[mind] life so far:")
     for s in mem.life_story(a.name):

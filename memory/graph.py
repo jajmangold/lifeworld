@@ -30,20 +30,20 @@ class Memory:
             s.run("MATCH (a:Agent {name:$n})-[:DID]->(st:Step) DETACH DELETE st", n=name)
             s.run("MERGE (a:Agent {name:$n})", n=name)
 
-    def log_step(self, agent, t, seen, thought, target, place=None):
+    def log_step(self, agent, t, seen, thought, target, place=None, needs=None):
         """Append one perceive->decide->act step to the agent's life-record."""
         with self.drv.session() as s:
             s.run(
                 """
                 MATCH (a:Agent {name:$agent})
-                CREATE (st:Step {t:$t, seen:$seen, thought:$thought, target:$target})
+                CREATE (st:Step {t:$t, seen:$seen, thought:$thought, target:$target, needs:$needs})
                 CREATE (a)-[:DID]->(st)
                 WITH st WHERE $place IS NOT NULL
                 MERGE (p:Place {name:$place})
                 CREATE (st)-[:AT]->(p)
                 """,
                 agent=agent, t=t, seen=seen, thought=thought,
-                target=target, place=place)
+                target=target, place=place, needs=needs)
 
     # --- society / storyline (M3) ---
     def add_utterance(self, agent, turn, say, do, scene=None):
