@@ -39,16 +39,38 @@ def load_wav_16k(path):
     return x
 
 
-def run_one(sess, ins, a2f_dir, wav, out, identity):
+def load_solver(a2f_dir, identity, ridge=0.05):
+    """Build the frontal-masked ARKit-52 least-squares solver for an identity.
+    The network output and bs_skin bases share a coordinate space (bs.neutral ==
+    model_data.neutral_skin), so geometry deltas project onto the named blendshape
+    deltas. Bases are zero outside the face -> restrict to frontalMask."""
+    import json as _json
+    bs = np.load(f"{a2f_dir}/bs_skin_{identity}.npz", allow_pickle=True)
+    pose_names = [p.decode() if isinstance(p, bytes) else str(p) for p in bs["poseNames"]]
+    names = [n for n in pose_names if n != "neutral"]
+    neutral = bs["neutral"].astype(np.float32)
+    vmask = bs["frontalMask"].astype(np.int64)
+    dmask = (vmask[:, None] * 3 + np.arange(3)).reshape(-1)          # vertex->xyz dim indices
+    A = np.stack([(bs[n].astype(np.float32) - neutral).reshape(-1)[dmask] for n in names], 1)  # (M,52)
+    pinv = np.linalg.solve(A.T @ A + ridge * np.eye(A.shape[1], dtype=np.float32), A.T).astype(np.float32)  # (52,M)
+    active = np.ones(len(names), np.float32)
+    try:
+        cfg = _json.load(open(f"{a2f_dir}/bs_skin_config_{identity}.json"))
+        ap = cfg["blendshape_params"]["bsSolveActivePoses"]
+        active = np.array(ap[:len(names)], np.float32)
+    except Exception:
+        pass
+    return {"names": names, "dmask": dmask, "pinv": pinv, "active": active}
+
+
+def run_one(sess, ins, a2f_dir, wav, out, identity, cache):
     idx = ["Claire", "James", "Mark"].index(identity)
+    if identity not in cache:
+        cache[identity] = load_solver(a2f_dir, identity)
+    slv = cache[identity]
 
     def shp(name):
         return [d if isinstance(d, int) and d > 0 else 1 for d in ins[name]]
-
-    md = np.load(f"{a2f_dir}/model_data_{identity}.npz", allow_pickle=True)
-    lip = md["lip_open_pose_delta"].astype(np.float32).reshape(-1)
-    eye = md["eye_close_pose_delta"].astype(np.float32).reshape(-1)
-    lip_n, eye_n = float(lip @ lip) + 1e-9, float(eye @ eye) + 1e-9
 
     audio = load_wav_16k(wav)
     audio = np.concatenate([np.zeros(WIN, np.float32), audio, np.zeros(WIN, np.float32)])
@@ -56,7 +78,8 @@ def run_one(sess, ins, a2f_dir, wav, out, identity):
 
     lat = np.zeros(shp("input_latents"), np.float32)
     rng = np.random.RandomState(0)
-    opens, blinks = [], []
+    dmask, pinv, active, names = slv["dmask"], slv["pinv"], slv["active"], slv["names"]
+    chunks = []
     for wi in range(nwin):
         seg = audio[wi * WIN:wi * WIN + WIN]
         if len(seg) < WIN:
@@ -70,19 +93,21 @@ def run_one(sess, ins, a2f_dir, wav, out, identity):
         }
         pred, lat = sess.run(["prediction", "output_latents"], feeds)
         skin = pred[0, CENTER0:CENTER1, :SKIN_DIMS]          # (30, 72006) deltas
-        opens.append(skin @ lip / lip_n)
-        blinks.append(skin @ eye / eye_n)
+        chunks.append((pinv @ skin[:, dmask].T).T)           # (30, 52) ARKit weights
 
-    o = np.concatenate(opens); b = np.concatenate(blinks)
-    o = np.clip(o, 0, None); b = np.clip(b, 0, None)
-    o = o / (np.percentile(o, 97) + 1e-6)                    # normalize to ~[0,1]
-    b = b / (np.percentile(b, 99) + 1e-6)
-    o = np.clip(o, 0, 1).astype(np.float32); b = np.clip(b, 0, 1).astype(np.float32)
-    W = np.stack([o, b, b], 1)                               # jawOpen, blinkL, blinkR
-    json.dump({"arkit_names": ["jawOpen", "eyeBlinkLeft", "eyeBlinkRight"],
-               "weights": W.tolist(), "fps": FPS, "engine": "a2f-3d"}, open(out, "w"))
-    print(f"A2F_LIPSYNC_OK frames={len(W)} jawOpen[mean/max]={o.mean():.3f}/{o.max():.3f} "
-          f"blink[max]={b.max():.3f} -> {out}")
+    W = np.concatenate(chunks, 0) * active[None, :]          # gate inactive poses
+    # light temporal smoothing + clamp to ARKit [0,1]
+    k = 3
+    W = np.apply_along_axis(lambda v: np.convolve(np.pad(v, k // 2, "edge"),
+                                                  np.ones(k) / k, "valid")[:len(v)], 0, W)
+    W = np.clip(W, 0.0, 1.0).astype(np.float32)
+    jo = W[:, names.index("jawOpen")]
+    mc = W[:, names.index("mouthClose")]
+    mp = W[:, names.index("mouthPucker")]
+    json.dump({"arkit_names": names, "weights": W.tolist(), "fps": FPS, "engine": "a2f-3d"},
+              open(out, "w"))
+    print(f"A2F_LIPSYNC_OK frames={len(W)} jawOpen[mean/max]={jo.mean():.2f}/{jo.max():.2f} "
+          f"mouthClose[max]={mc.max():.2f} mouthPucker[max]={mp.max():.2f} -> {out}")
 
 
 def main():
@@ -102,11 +127,12 @@ def main():
         print("CUDA_EP_NOT_ACTIVE", sess.get_providers()); sys.exit(3)
     ins = {i.name: i.shape for i in sess.get_inputs()}
 
+    cache = {}
     if a.manifest:
         for job in json.load(open(a.manifest)):
-            run_one(sess, ins, a.a2f, job["wav"], job["out"], job.get("identity", "Claire"))
+            run_one(sess, ins, a.a2f, job["wav"], job["out"], job.get("identity", "Claire"), cache)
     else:
-        run_one(sess, ins, a.a2f, a.wav, a.out, a.identity)
+        run_one(sess, ins, a.a2f, a.wav, a.out, a.identity, cache)
 
 
 if __name__ == "__main__":

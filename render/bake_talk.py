@@ -17,7 +17,8 @@ import numpy as np
 import torch
 import smplx
 
-from face.talk import audio_to_face, arkit_to_face, eyelid_upper_indices, apply_blink
+from face.talk import (audio_to_face, arkit_to_face, eyelid_upper_indices,
+                       apply_blink, lip_region, apply_lips)
 
 
 def parse_args():
@@ -75,8 +76,18 @@ def main():
     except Exception as e:
         blinks = f"skipped ({e})"
 
+    # mesh-space mouth shaping (bilabial close + pucker) for real visemes, not just jaw
+    lips = "off"
+    if "mouth_close" in face:
+        try:
+            lipr = lip_region(model, np.full(10, float(a.shape), np.float32))
+            apply_lips(verts, lipr, face["mouth_close"], face["mouth_pucker"])
+            lips = "on"
+        except Exception as e:
+            lips = f"skipped ({e})"
+
     np.savez_compressed(a.out, verts=verts, faces=faces, rot_x=0.0)
-    print(f"[bake_talk] {a.out}  verts={verts.shape} frames={F} face={src} blinks={blinks}")
+    print(f"[bake_talk] {a.out}  verts={verts.shape} frames={F} face={src} blinks={blinks} lips={lips}")
 
 
 if __name__ == "__main__":

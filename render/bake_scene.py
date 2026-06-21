@@ -16,7 +16,8 @@ import numpy as np
 import torch
 import smplx
 
-from face.talk import arkit_to_face, _gaze_channels
+from face.talk import (arkit_to_face, _gaze_channels, eyelid_upper_indices,
+                       apply_blink, lip_region, apply_lips)
 
 
 def apose():
@@ -53,6 +54,8 @@ def main():
         jaw = np.zeros((total_F, 3), np.float32)
         expr = np.zeros((total_F, 10), np.float32)
         leye, reye = _gaze_channels(total_F, seed=ci)      # idle gaze throughout
+        mc = np.zeros(total_F, np.float32); mp = np.zeros(total_F, np.float32)
+        bl = np.zeros(total_F, np.float32); br = np.zeros(total_F, np.float32)
         off = 0
         for bi, b in enumerate(beats):
             Fb = beat_F[bi]
@@ -62,6 +65,10 @@ def main():
                 expr[off:off + Fb] = f["expression"]
                 leye[off:off + Fb] = f["leye"]
                 reye[off:off + Fb] = f["reye"]
+                mc[off:off + Fb] = f.get("mouth_close", 0.0)
+                mp[off:off + Fb] = f.get("mouth_pucker", 0.0)
+                bl[off:off + Fb] = f.get("blink_l", 0.0)
+                br[off:off + Fb] = f.get("blink_r", 0.0)
             off += Fb
 
         g = ch.get("gender", "neutral")
@@ -82,6 +89,13 @@ def main():
         )
         with torch.no_grad():
             v = model(**kw).vertices.numpy().astype(np.float32)
+        # mesh-space blinks + mouth shaping (real visemes, not just jaw)
+        try:
+            li, ri = eyelid_upper_indices(model, betas[0])
+            apply_blink(v, li, ri, bl, br)
+            apply_lips(v, lip_region(model, betas[0]), mc, mp)
+        except Exception as e:
+            print("  face-mesh apply skipped:", e)
         all_verts.append(v)
         print(f"  {ch['name']}: gender={g} pos=({x},{z}) yaw={ch.get('yaw_deg',0)}")
 
