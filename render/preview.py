@@ -28,12 +28,12 @@ from render_smplx import build_mesh, frame_camera, _aim
 from mouth_parts import build_mouth
 
 
-def bake(arkit, model, betas_row, F, fps):
+def bake(arkit, model, betas_row, F, fps, yaw=0.0):
     rest = np.zeros((1, 21, 3), np.float32)
     rest[0, 15] = [0, 0, -1.0]; rest[0, 16] = [0, 0, 1.0]
     face = drive(arkit, F, fps)
     out = model(betas=torch.from_numpy(np.tile(betas_row, (F, 1))),
-                global_orient=torch.zeros((F, 3)),
+                global_orient=torch.from_numpy(np.tile([[0.0, yaw, 0.0]], (F, 1)).astype(np.float32)),
                 body_pose=torch.from_numpy(np.tile(rest.reshape(1, 63), (F, 1))),
                 jaw_pose=torch.from_numpy(face["jaw"]),
                 leye_pose=torch.from_numpy(face["leye"]),
@@ -55,6 +55,7 @@ def main():
     ap.add_argument("--uv", default="/work/assets/smplx_uv_2023.npz")
     ap.add_argument("--texture", default="/work/assets/smplx_texture_f_alb_eyefix.png")
     ap.add_argument("--fps", type=int, default=24)
+    ap.add_argument("--yaw", type=float, default=0.0, help="head yaw deg (test angled cinematic case)")
     ap.add_argument("--res", type=int, default=320)
     ap.add_argument("--out", required=True)
     ap.add_argument("--mp4", default=None)
@@ -70,10 +71,12 @@ def main():
     if a.betas:
         bv = np.array([float(x) for x in a.betas.split(",")], np.float32)
         betas_row[:len(bv)] = bv[:10]
-    verts, face = bake(arkit, model, betas_row, F, a.fps)
+    yaw = np.radians(a.yaw)
+    verts, face = bake(arkit, model, betas_row, F, a.fps, yaw)
     faces = model.faces.astype(np.int64)
     # teeth + tongue + dark interior (SMPL-X has none -> open mouth is a black void)
-    mv, mf, mcol = build_mouth(verts, lip_region(model, betas_row)["idx"], face["jaw"][:, 0])
+    mv, mf, mcol = build_mouth(verts, lip_region(model, betas_row)["idx"], face["jaw"][:, 0],
+                               yaw_rad=yaw)
 
     uv = np.load(a.uv)["uv_coordinates"] if os.path.exists(a.uv) else None
     tex = Image.open(a.texture).convert("RGB") if os.path.exists(a.texture) else None

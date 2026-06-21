@@ -94,7 +94,8 @@ def main():
             apply_lips(v, lip_region(model, betas[0]), mc, mp)
         except Exception as e:
             print("  face-mesh apply skipped:", e)
-        mvp, mfaces, mcolors = build_mouth(v, lip_region(model, betas[0])["idx"], jaw[:, 0])
+        mvp, mfaces, mcolors = build_mouth(v, lip_region(model, betas[0])["idx"], jaw[:, 0],
+                                           yaw_rad=yaw)
         all_mouth.append(mvp); all_gate.append(jaw[:, 0])
         all_verts.append(v)
         print(f"  {ch['name']}: gender={g} pos=({x},{z}) yaw={ch.get('yaw_deg',0)}")

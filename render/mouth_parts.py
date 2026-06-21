@@ -9,7 +9,7 @@ Returns (mverts (F,M,3), faces (T,3), colors (M,3) uint8) to render alongside th
 import numpy as np
 
 
-def build_mouth(verts, lip_idx, jaw_rad, drop_scale=0.06, width=0.5, y_drop=0.009):
+def build_mouth(verts, lip_idx, jaw_rad, drop_scale=0.06, width=0.5, y_drop=0.009, yaw_rad=0.0):
     F = verts.shape[0]
     m0 = verts[0, lip_idx]
     # anchor to the FRONT-MOST lip verts (actual lip surface), not the broad region's
@@ -34,6 +34,14 @@ def build_mouth(verts, lip_idx, jaw_rad, drop_scale=0.06, width=0.5, y_drop=0.00
         back = quad(cy - 0.008 - di, cy + 0.008, zc - 0.010, hw * 1.05)  # dark interior
         MV.append(np.concatenate([upper, lower, tongue, back], 0))
     MV = np.stack(MV, 0).astype(np.float32)                 # (F, 16, 3)
+
+    # rotate the (axis-aligned) parts about Y to match the head's yaw, around the mouth
+    # centre — otherwise on an angled head they face the camera and punch through the nose.
+    if yaw_rad:
+        c, s = np.cos(yaw_rad), np.sin(yaw_rad)
+        dx = MV[..., 0] - cx; dz = MV[..., 2] - zc
+        MV[..., 0] = cx + c * dx + s * dz
+        MV[..., 2] = zc - s * dx + c * dz
 
     faces = []
     for g in range(4):
