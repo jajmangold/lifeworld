@@ -10,6 +10,7 @@ import os
 os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
 import io
 import json
+import subprocess
 import sys
 import time
 import numpy as np
@@ -97,6 +98,69 @@ def render(params, gender):
     buf = io.BytesIO(); sheet.save(buf, "PNG"); return buf.getvalue()
 
 
+# ---- "Render Theo" talking-clip (head close-up mp4) -------------------------------------
+CLIP_WAV = "/work/output/scene/theo_0.wav"
+CLIP_ARKIT = "/work/output/scene/theo_0.arkit.json"
+CLIP_MP4 = "/lw/output/closeup_teeth.mp4"
+_theo = {}
+_rc = [None]
+
+
+def theo_state():
+    """Bake Theo's talking clip ONCE (body verts don't depend on teeth params); cache it so
+    re-renders after a slider change only rebuild the mouth + redraw."""
+    if _theo:
+        return _theo
+    arkit = json.load(open(CLIP_ARKIT))
+    F = max(2, round(len(arkit["weights"]) / float(arkit["fps"]) * FPS))
+    model = smplx.create("/work/models", model_type="smplx", gender="male", num_betas=10,
+                         use_pca=False, flat_hand_mean=True, batch_size=F)
+    betas = np.zeros((1, 10), np.float32)
+    face = drive(arkit, F, FPS)
+    rest = np.zeros((1, 21, 3), np.float32); rest[0, 15] = [0, 0, -1.0]; rest[0, 16] = [0, 0, 1.0]
+    out = model(betas=torch.from_numpy(np.tile(betas, (F, 1))),
+                global_orient=torch.zeros((F, 3)),
+                body_pose=torch.from_numpy(np.tile(rest.reshape(1, 63), (F, 1))),
+                jaw_pose=torch.from_numpy(face["jaw"]),
+                leye_pose=torch.from_numpy(face["leye"]), reye_pose=torch.from_numpy(face["reye"]))
+    v = out.vertices.detach().numpy().astype(np.float32)
+    li, ri = eyelid_upper_indices(model, betas[0])
+    apply_blink(v, li, ri, face["blink_l"], face["blink_r"])
+    apply_lips(v, lip_region(model, betas[0]), face["mouth_close"], face["mouth_pucker"])
+    tex = Image.open(TEX["male"]).convert("RGB").resize((512, 512), Image.LANCZOS)
+    yfov, cam_pose, center = frame_camera(v, "head", 1.0)
+    _theo.update(F=F, v=v, jaw=face["jaw"][:, 0], faces=model.faces.astype(np.int64),
+                 lip_idx=lip_region(model, betas[0])["idx"], tex=tex,
+                 yfov=yfov, cam_pose=cam_pose, center=center)
+    return _theo
+
+
+def render_clip(params):
+    st = theo_state()
+    gate = params.get("gate", 0.12)
+    mv, mf, mcol = build_mouth(st["v"], st["lip_idx"], st["jaw"], yaw_rad=0.0, params=params)
+    if _rc[0] is None:
+        _rc[0] = pyrender.OffscreenRenderer(720, 720)
+    r = _rc[0]
+    os.makedirs("/tmp/cu", exist_ok=True)
+    for fi in range(st["F"]):
+        s = pyrender.Scene(bg_color=[0.10, 0.09, 0.08, 1.0], ambient_light=[0.45, 0.43, 0.40])
+        for sm in room_set(st["v"]):
+            s.add(sm)
+        s.add(build_mesh(st["v"][fi], st["faces"], _uv, st["tex"]))
+        if st["jaw"][fi] > gate:
+            mt = trimesh.Trimesh(mv[fi], mf, vertex_colors=mcol, process=False)
+            s.add(pyrender.Mesh.from_trimesh(mt, smooth=False))
+        s.add(pyrender.PerspectiveCamera(yfov=st["yfov"], aspectRatio=1.0), pose=st["cam_pose"])
+        s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=3.0), pose=_aim([1.5, 3.2, 2.5], st["center"]))
+        s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=2.0), pose=_aim([-2.5, 1.6, 2.2], st["center"]))
+        Image.fromarray(r.render(s)[0]).save(f"/tmp/cu/frame_{fi:04d}.png")
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS),
+                    "-i", "/tmp/cu/frame_%04d.png", "-i", CLIP_WAV, "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p", "-crf", "18", "-shortest", CLIP_MP4], check=True)
+
+
+from render_smplx import room_set                         # noqa: E402 (after sys.path setup)
 PAGE = open("/lw/render/teeth_ui_page.html").read()
 
 
@@ -118,23 +182,42 @@ class H(BaseHTTPRequestHandler):
                         .replace("__FIELDS__", json.dumps(FIELDS))
                         .replace("__PARTS__", json.dumps(PARTS)))
             self._send(200, "text/html; charset=utf-8", page.encode())
+        elif self.path.startswith("/clip.mp4"):
+            if os.path.exists(CLIP_MP4):
+                self._send(200, "video/mp4", open(CLIP_MP4, "rb").read())
+            else:
+                self._send(404, "text/plain", b"no clip yet")
         else:
             self._send(404, "text/plain", b"404")
 
+    def _write_params(self, raw):
+        p = json.loads(raw); p.pop("_gender", None)
+        cur = load_params()
+        for k, v in p.items():
+            if isinstance(v, dict) and isinstance(cur.get(k), dict):
+                cur[k].update(v)
+            else:
+                cur[k] = v
+        json.dump({k: cur[k] for k in cur}, open(PARAMS, "w"), indent=2)
+        return cur
+
     def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(n)
+        if self.path == "/clip":
+            try:
+                cur = self._write_params(raw)
+                t = time.time(); render_clip(cur)
+                self._send(200, "application/json",
+                           json.dumps({"ok": True, "sec": round(time.time() - t, 1)}).encode())
+            except Exception as e:
+                self._send(200, "application/json", json.dumps({"ok": False, "err": str(e)}).encode())
+            return
         if self.path != "/render":
             return self._send(404, "text/plain", b"404")
-        n = int(self.headers.get("Content-Length", 0))
         try:
-            p = json.loads(self.rfile.read(n))
-            gender = p.pop("_gender", "female")
-            cur = load_params()
-            for k, v in p.items():
-                if isinstance(v, dict) and isinstance(cur.get(k), dict):
-                    cur[k].update(v)
-                else:
-                    cur[k] = v
-            json.dump({k: cur[k] for k in cur}, open(PARAMS, "w"), indent=2)
+            gender = json.loads(raw).get("_gender", "female")
+            cur = self._write_params(raw)
             t = time.time()
             png = render(cur, gender)
             self.send_response(200); self.send_header("Content-Type", "image/png")

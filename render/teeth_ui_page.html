@@ -20,8 +20,14 @@
    <label class=lab><input type=checkbox id=live checked> live</label></div>
  <div id=globals></div><div id=parts></div>
  <div id=status>warming up…</div>
+ <button id=clipbtn onclick=clip() style="margin-top:12px;width:100%;padding:10px;border:0;border-radius:6px;background:#48c;color:#fff;font-size:15px;cursor:pointer">▶ Render Theo talking (~60s)</button>
+ <div id=clipstatus style="color:#9cf;height:18px;margin-top:6px"></div>
 </div>
-<div id=view><img id=img></div>
+<div id=view>
+ <div style="color:#777;font-size:12px;margin-bottom:4px">bite preview (live)</div>
+ <img id=img>
+ <video id=vid controls loop style="display:none;max-width:70%;margin-top:14px;border:1px solid #333;border-radius:6px"></video>
+</div>
 <script>
 const P=__PARAMS__, GLOBALS=__GLOBALS__, FIELDS=__FIELDS__, PARTS=__PARTS__;
 const hex=c=>'#'+c.map(x=>(+x).toString(16).padStart(2,'0')).join('');
@@ -56,6 +62,19 @@ async function go(){
     }else s.textContent='ERROR: '+(await r.text());
   }catch(e){s.textContent='ERROR: '+e}
   busy=false; if(pending){pending=false;go();}
+}
+async function clip(){
+  const b=document.getElementById('clipbtn'),s=document.getElementById('clipstatus');
+  b.disabled=true;s.textContent='rendering Theo clip…';
+  P._gender=document.getElementById('gender').value;
+  try{
+    const r=await fetch('/clip',{method:'POST',body:JSON.stringify(P)});
+    const j=await r.json();
+    if(j.ok){const v=document.getElementById('vid');v.style.display='block';
+      v.src='/clip.mp4?t='+Date.now();v.play();s.textContent='clip ready ('+j.sec+'s)';}
+    else s.textContent='ERROR: '+j.err;
+  }catch(e){s.textContent='ERROR: '+e}
+  b.disabled=false;
 }
 go();
 </script></body></html>
