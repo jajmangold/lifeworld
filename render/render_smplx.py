@@ -220,14 +220,34 @@ def main():
     # a beat, like a dialogue edit). Falls back to the single wide shot.
     cam_poses = None
     if a.cut and shot_speaker is not None and beat_frames is not None:
+        aspect = a.res_x / a.res_y
+        def single(p, fr):                                  # head+shoulders on character p
+            return frame_camera(verts[p, min(fr, F - 1)][None], "face", aspect)[1]
+        def wide(fr):                                       # the whole room/cast
+            return frame_camera(verts[:, min(fr, F - 1)], "full", aspect)[1]
         cam_poses = np.repeat(cam_pose[None], F, axis=0)
-        off = 0
-        for n in beat_frames:
-            n = int(n); s = int(shot_speaker[off]); mid = min(off + n // 2, F - 1)
-            _, pose, _ = frame_camera(verts[s, mid][None], "face", a.res_x / a.res_y)
-            cam_poses[off:off + n] = pose
-            off += n
-        print(f"[render] camera cuts: {len(beat_frames)} beats")
+        est = min(34, F // 6)                               # establishing wide (~1.4s)
+        cam_poses[:est] = wide(est // 2)
+        off = 0; ncuts = 1
+        for bi, n in enumerate(beat_frames):
+            n = int(n); s = int(shot_speaker[off]); b0, b1 = off, off + n
+            seg0 = max(b0, est)
+            if seg0 < b1:
+                if n > 72:                                  # long beat: insert a reaction cut
+                    r0 = b0 + int(n * 0.55); r1 = min(r0 + 22, b1)
+                    lis = [k for k in range(P) if k != s]
+                    lp = lis[bi % len(lis)]
+                    cam_poses[seg0:r0] = single(s, (seg0 + r0) // 2)
+                    cam_poses[r0:r1] = single(lp, (r0 + r1) // 2)   # listener reaction
+                    cam_poses[r1:b1] = single(s, (r1 + b1) // 2)
+                    ncuts += 3
+                else:
+                    cam_poses[seg0:b1] = single(s, (seg0 + b1) // 2)
+                    ncuts += 1
+            off = b1
+        cf = max(F - 26, est)                               # close on a wide for resolution
+        cam_poses[cf:] = wide((cf + F) // 2); ncuts += 1
+        print(f"[render] camera cuts: {ncuts} shots over {len(beat_frames)} beats")
 
     cam = pyrender.PerspectiveCamera(yfov=yfov, aspectRatio=a.res_x / a.res_y)
     # warm, soft, fairly even key/fill/rim — high key so its shadow falls down (not a big
