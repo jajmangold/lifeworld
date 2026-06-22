@@ -19,7 +19,8 @@ import smplx
 
 from face.talk import (_gaze_channels, eyelid_upper_indices,
                        apply_blink, lip_region, apply_lips)
-from face_drive import drive          # single coherent face driver
+from face_drive import drive          # (kept) jaw-only driver
+from face_flame import FlameDriver    # ARKit -> full FLAME expression+jaw+eye (MP_2_FLAME)
 from mouth_parts import build_mouth
 
 
@@ -77,27 +78,28 @@ def main():
         return rs(12, 75), rs(75, 120), rs(120, 165)
 
     body0 = apose()
+    FLAME = FlameDriver("/work/tools/mp2flame/mappings")    # ARKit-52 -> FLAME expression/jaw
     all_verts = []; all_mouth = []; all_gate = []; mfaces = mcolors = None
     for ci, ch in enumerate(chars):
+        expr = np.zeros((total_F, 100), np.float32)         # FLAME expression (brows/smile/...)
         jaw = np.zeros((total_F, 3), np.float32)
-        leye, reye = _gaze_channels(total_F, seed=ci)      # ONE continuous gaze (never overwritten)
-        mc = np.zeros(total_F, np.float32); mp = np.zeros(total_F, np.float32)
-        bl = np.zeros(total_F, np.float32); br = np.zeros(total_F, np.float32)
+        leye, reye = _gaze_channels(total_F, seed=ci)       # idle gaze (LAM emits no eye-look)
         off = 0
         for bi, b in enumerate(beats):
             Fb = beat_F[bi]
-            if b["speaker"] == ci:                          # overlay only mouth/jaw/blink
-                f = drive(beat_arkit[bi], Fb, fps)
-                jaw[off:off + Fb] = f["jaw"]
-                mc[off:off + Fb] = f["mouth_close"]
-                mp[off:off + Fb] = f["mouth_pucker"]
-                bl[off:off + Fb] = f["blink_l"]
-                br[off:off + Fb] = f["blink_r"]
+            if b["speaker"] == ci:                          # FLAME face during this char's lines
+                e, jw, _, _ = FLAME.drive(beat_arkit[bi], Fb, fps)
+                R = min(8, Fb // 3); w = np.ones(Fb, np.float32)
+                if R > 0:
+                    w[:R] = np.linspace(0, 1, R); w[-R:] = np.linspace(1, 0, R)
+                seg = slice(off, off + Fb); w2 = w[:, None]
+                expr[seg] = w2 * e; jaw[seg] = w2 * jw      # blend in at beat edges
             off += Fb
 
         g = ch.get("gender", "neutral")
         model = smplx.create(a.model_dir, model_type="smplx", gender=g, num_betas=10,
-                             use_pca=False, flat_hand_mean=False, batch_size=total_F)
+                             use_pca=False, flat_hand_mean=False, num_expression_coeffs=100,
+                             batch_size=total_F)
         betas = np.zeros((1, 10), np.float32)
         bv = np.asarray(ch.get("betas", []), np.float32)
         betas[0, :min(10, len(bv))] = bv[:10]
@@ -142,17 +144,12 @@ def main():
             body_pose=torch.from_numpy(bp.astype(np.float32)),
             left_hand_pose=torch.from_numpy(lh), right_hand_pose=torch.from_numpy(rh),
             transl=torch.from_numpy(np.tile([[x, 0.0, z]], (total_F, 1)).astype(np.float32)),
-            jaw_pose=torch.from_numpy(jaw),             # no `expression` (inert on SMPL-X)
+            jaw_pose=torch.from_numpy(jaw), expression=torch.from_numpy(expr),  # FLAME face
             leye_pose=torch.from_numpy(leye), reye_pose=torch.from_numpy(reye),
         )
         with torch.no_grad():
             v = model(**kw).vertices.numpy().astype(np.float32)
-        # mesh-space blinks + mouth shaping (real visemes, not just jaw)
-        try:                                            # blinks only; apply_lips distorted the
-            li, ri = eyelid_upper_indices(model, betas[0])   # upper lip, jaw+teeth carry the mouth
-            apply_blink(v, li, ri, bl, br)
-        except Exception as e:
-            print("  face-mesh apply skipped:", e)
+        # FLAME expression carries brows/smiles/squints AND blinks; teeth are bone-rigged below
         mvp, mfaces, mcolors = build_mouth(v, lip_region(model, betas[0])["idx"], jaw[:, 0],
                                            yaw_rad=yaw, model=model)
         all_mouth.append(mvp); all_gate.append(jaw[:, 0])
