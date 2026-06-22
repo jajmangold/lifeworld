@@ -46,6 +46,8 @@ def parse_args():
                     help="downscale textures to NxN on load (0=full); 4K re-upload/frame is the bottleneck")
     ap.add_argument("--room", action="store_true",
                     help="warm interior set (floor+walls) instead of void/bare ground")
+    ap.add_argument("--floor-tex", default="", help="floor texture image for --room")
+    ap.add_argument("--wall-tex", default="", help="wall texture image for --room")
     return ap.parse_args()
 
 
@@ -62,9 +64,16 @@ def ground_plane(all_verts, half=4.0):
     return pyrender.Mesh.from_trimesh(tm, material=mat, smooth=False)
 
 
-def _quad(corners, color, rough=1.0):
+def _quad(corners, color, rough=1.0, tex=None, rep=1.0):
     v = np.array(corners, np.float32)
     f = np.array([[0, 1, 2], [0, 2, 3]], np.int64)
+    if tex is not None:                 # textured (tiled rep x rep)
+        uv = np.array([[0, 0], [rep, 0], [rep, rep], [0, rep]], np.float32)
+        tm = trimesh.Trimesh(v, f, visual=trimesh.visual.TextureVisuals(uv=uv, image=tex),
+                             process=False)
+        m = pyrender.Mesh.from_trimesh(tm, smooth=False)
+        m.primitives[0].material.doubleSided = True
+        return m
     tm = trimesh.Trimesh(v, f, process=False)
     mat = pyrender.MetallicRoughnessMaterial(
         baseColorFactor=color + [1.0], metallicFactor=0.0, roughnessFactor=rough,
@@ -72,9 +81,9 @@ def _quad(corners, color, rough=1.0):
     return pyrender.Mesh.from_trimesh(tm, material=mat, smooth=False)
 
 
-def room_set(all_verts):
-    """A simple warm interior: floor + back wall + two side walls around the cast, so
-    they stand in a room instead of a black void. Catches shadows; gives perspective."""
+def room_set(all_verts, floor_tex=None, wall_tex=None):
+    """A warm interior: floor + back wall + two side walls around the cast, so they stand
+    in a room (not a black void). Textured if floor_tex/wall_tex given, else flat color."""
     p = all_verts.reshape(-1, 3)
     y0 = float(p[:, 1].min())
     cx, cz = float(p[:, 0].mean()), float(p[:, 2].mean())
@@ -85,13 +94,13 @@ def room_set(all_verts):
     floor = [0.40, 0.36, 0.32]; wall = [0.56, 0.50, 0.45]; side = [0.50, 0.45, 0.40]
     return [
         _quad([[cx - W, y0, back], [cx + W, y0, back],
-               [cx + W, y0, front], [cx - W, y0, front]], floor),                 # floor
+               [cx + W, y0, front], [cx - W, y0, front]], floor, tex=floor_tex, rep=4.0),  # floor
         _quad([[cx - W, y0, back], [cx + W, y0, back],
-               [cx + W, y0 + h, back], [cx - W, y0 + h, back]], wall),            # back wall
+               [cx + W, y0 + h, back], [cx - W, y0 + h, back]], wall, tex=wall_tex, rep=2.5),  # back
         _quad([[cx - W, y0, back], [cx - W, y0, front],
-               [cx - W, y0 + h, front], [cx - W, y0 + h, back]], side),           # left wall
+               [cx - W, y0 + h, front], [cx - W, y0 + h, back]], side, tex=wall_tex, rep=2.5),  # L
         _quad([[cx + W, y0, back], [cx + W, y0, front],
-               [cx + W, y0 + h, front], [cx + W, y0 + h, back]], side),           # right wall
+               [cx + W, y0 + h, front], [cx + W, y0 + h, back]], side, tex=wall_tex, rep=2.5),  # R
     ]
 
 
@@ -218,7 +227,9 @@ def main():
     if not a.no_shadows:
         flags |= pyrender.RenderFlags.SHADOWS_DIRECTIONAL
     if a.room:
-        set_meshes = room_set(verts)
+        ftex = Image.open(a.floor_tex).convert("RGB") if a.floor_tex and os.path.exists(a.floor_tex) else None
+        wtex = Image.open(a.wall_tex).convert("RGB") if a.wall_tex and os.path.exists(a.wall_tex) else None
+        set_meshes = room_set(verts, ftex, wtex)
         bg = [0.10, 0.09, 0.08]                 # warm so wall edges blend
         ambient = [0.45, 0.43, 0.40]
     else:
