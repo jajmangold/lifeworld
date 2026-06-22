@@ -130,7 +130,7 @@ def main():
     verts = np.stack(all_verts, 0)                          # (P, F, V, 3)
     faces = smplx.create(a.model_dir, model_type="smplx", gender="neutral").faces.astype(np.int64)
     np.savez_compressed(a.out, verts=verts, faces=faces, rot_x=0.0,
-                        beat_frames=np.array(beat_F),
+                        beat_frames=np.array(beat_F), shot_speaker=spk,
                         mouth_verts=np.stack(all_mouth, 0), mouth_faces=mfaces,
                         mouth_colors=mcolors, mouth_gate=np.stack(all_gate, 0))
     print(f"[bake_scene] wrote {a.out} verts={verts.shape}")

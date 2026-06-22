@@ -48,6 +48,8 @@ def parse_args():
                     help="warm interior set (floor+walls) instead of void/bare ground")
     ap.add_argument("--floor-tex", default="", help="floor texture image for --room")
     ap.add_argument("--wall-tex", default="", help="wall texture image for --room")
+    ap.add_argument("--cut", action="store_true",
+                    help="cut to a medium shot of the active speaker per beat (needs shot_speaker)")
     return ap.parse_args()
 
 
@@ -183,6 +185,8 @@ def main():
         if mgate.ndim == 1:
             mgate = mgate[None]
         print(f"[render] mouth geometry: {mverts.shape}")
+    shot_speaker = np.asarray(d["shot_speaker"]) if "shot_speaker" in d.files else None
+    beat_frames = np.asarray(d["beat_frames"]) if "beat_frames" in d.files else None
 
     R = rot_x_mat(a.rot_x)
     if a.rot_x:
@@ -211,6 +215,19 @@ def main():
 
     yfov, cam_pose, center = frame_camera(verts, a.framing, a.res_x / a.res_y)
     bg = [float(x) for x in a.bg.split(",")]
+
+    # per-frame camera: cut to a medium shot of the active speaker, per beat (static within
+    # a beat, like a dialogue edit). Falls back to the single wide shot.
+    cam_poses = None
+    if a.cut and shot_speaker is not None and beat_frames is not None:
+        cam_poses = np.repeat(cam_pose[None], F, axis=0)
+        off = 0
+        for n in beat_frames:
+            n = int(n); s = int(shot_speaker[off]); mid = min(off + n // 2, F - 1)
+            _, pose, _ = frame_camera(verts[s, mid][None], "face", a.res_x / a.res_y)
+            cam_poses[off:off + n] = pose
+            off += n
+        print(f"[render] camera cuts: {len(beat_frames)} beats")
 
     cam = pyrender.PerspectiveCamera(yfov=yfov, aspectRatio=a.res_x / a.res_y)
     # warm, soft, fairly even key/fill/rim — high key so its shadow falls down (not a big
@@ -246,7 +263,7 @@ def main():
             if mverts is not None and mgate[p, fi] > 0.12:   # interior only when clearly open
                 mt = trimesh.Trimesh(mverts[p, fi], mfaces, vertex_colors=mcolors, process=False)
                 scene.add(pyrender.Mesh.from_trimesh(mt, smooth=False))
-        scene.add(cam, pose=cam_pose)
+        scene.add(cam, pose=(cam_poses[fi] if cam_poses is not None else cam_pose))
         for lt, pose in lights:
             scene.add(lt, pose=pose)
         color, _ = r.render(scene, flags=flags)
