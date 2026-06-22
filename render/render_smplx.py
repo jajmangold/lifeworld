@@ -20,6 +20,7 @@ import trimesh
 import pyrender
 import imageio.v2 as imageio
 from PIL import Image
+from mouth_parts import load_params      # mouth/teeth gate (tunable in mouth_params.json)
 
 
 def parse_args():
@@ -185,6 +186,7 @@ def main():
         if mgate.ndim == 1:
             mgate = mgate[None]
         print(f"[render] mouth geometry: {mverts.shape}")
+    gate_thr = load_params().get("gate", 0.12)         # show teeth only when mouth this open
     shot_speaker = np.asarray(d["shot_speaker"]) if "shot_speaker" in d.files else None
     beat_frames = np.asarray(d["beat_frames"]) if "beat_frames" in d.files else None
 
@@ -280,7 +282,7 @@ def main():
         for p in range(P):
             tex = tex_imgs[p % len(tex_imgs)] if tex_imgs else None
             scene.add(build_mesh(verts[p, fi], faces, uv, tex, a.flip_v))
-            if mverts is not None and mgate[p, fi] > 0.12:   # interior only when clearly open
+            if mverts is not None and mgate[p, fi] > gate_thr:   # interior only when clearly open
                 mt = trimesh.Trimesh(mverts[p, fi], mfaces, vertex_colors=mcolors, process=False)
                 scene.add(pyrender.Mesh.from_trimesh(mt, smooth=False))
         scene.add(cam, pose=(cam_poses[fi] if cam_poses is not None else cam_pose))
