@@ -35,11 +35,11 @@ def build_mouth(verts, lip_idx, jaw_rad, drop_scale=0.06, width=0.42, y_drop=0.0
 
     # upper teeth slightly FORWARD + clearly visible so the bite reads 'upper in front'
     # (when they were dim/recessed, the full lower lip dominated -> underbite look).
-    upper = quad(cy + 0.0015, cy + 0.0075, zlip - 0.006, hw * 0.95)
+    upper = quad(cy + 0.0015, cy + 0.0075, zlip - 0.004, hw * 0.95)   # forward = upper overhangs
     MV = []
     for i in range(F):
         di = float(d[i])
-        lower = quad(cy - 0.0075 - di, cy - 0.0025 - di, zlip - 0.013, hw * 0.9)  # behind upper
+        lower = quad(cy - 0.0075 - di, cy - 0.0025 - di, zlip - 0.019, hw * 0.85)  # further behind upper
         tongue = quad(cy - 0.007 - di, cy - 0.001 - di, zlip - 0.019, hw * 0.7)
         cavity = quad(cy - 0.011 - di, cy + 0.010, zlip - 0.026, hw * 1.0)   # dark, deepest
         MV.append(np.concatenate([upper, lower, tongue, cavity], 0))
