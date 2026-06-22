@@ -39,7 +39,8 @@ def drive(arkit, F, fps, *, jaw_max=0.30, lip_gate=0.5, smooth=3, seed=0):
     jaw_open = _smooth(ch("jawOpen"), smooth)
     mouth_close = _smooth(ch("mouthClose"), smooth)
     mouth_pucker = _smooth(ch("mouthPucker") + 0.5 * ch("mouthFunnel"), smooth)
-    blink_l, blink_r = ch("eyeBlinkLeft"), ch("eyeBlinkRight")
+    # synchronize the two eyes (A2F predicts L/R blink independently -> one eye winks/droops)
+    blink_l = blink_r = np.maximum(ch("eyeBlinkLeft"), ch("eyeBlinkRight"))
 
     # normalize jawOpen so typical speech peaks use the full range (the raw weights
     # rarely exceed ~0.6, which would otherwise waste jaw_max and look barely-open).

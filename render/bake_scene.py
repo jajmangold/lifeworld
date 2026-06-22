@@ -144,10 +144,9 @@ def main():
         with torch.no_grad():
             v = model(**kw).vertices.numpy().astype(np.float32)
         # mesh-space blinks + mouth shaping (real visemes, not just jaw)
-        try:
-            li, ri = eyelid_upper_indices(model, betas[0])
+        try:                                            # blinks only; apply_lips distorted the
+            li, ri = eyelid_upper_indices(model, betas[0])   # upper lip, jaw+teeth carry the mouth
             apply_blink(v, li, ri, bl, br)
-            apply_lips(v, lip_region(model, betas[0]), mc, mp)
         except Exception as e:
             print("  face-mesh apply skipped:", e)
         mvp, mfaces, mcolors = build_mouth(v, lip_region(model, betas[0])["idx"], jaw[:, 0],
