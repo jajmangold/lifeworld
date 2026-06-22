@@ -50,6 +50,16 @@ def main():
     total_F = sum(beat_F)
     print(f"[bake_scene] {len(chars)} chars, {len(beats)} beats, {total_F} frames @ {fps}fps")
 
+    # per-frame active speaker + character positions, for head look-at
+    positions = [np.asarray(c.get("pos", [0.0, 0.0]), np.float32) for c in chars]
+    spk = np.zeros(total_F, np.int64); _o = 0
+    for bi, b in enumerate(beats):
+        spk[_o:_o + beat_F[bi]] = b["speaker"]; _o += beat_F[bi]
+    tline = np.arange(total_F, dtype=np.float32) / fps
+
+    def _ma(v, k=9):
+        return np.convolve(np.pad(v, k // 2, mode="edge"), np.ones(k) / k, "valid")[:len(v)]
+
     body0 = apose()
     all_verts = []; all_mouth = []; all_gate = []; mfaces = mcolors = None
     for ci, ch in enumerate(chars):
@@ -77,10 +87,25 @@ def main():
         betas[0, :min(10, len(bv))] = bv[:10]
         yaw = np.radians(ch.get("yaw_deg", 0.0))
         x, z = ch.get("pos", [0.0, 0.0])
+        # aliveness: turn head toward the active speaker (listeners -> speaker; the speaker
+        # -> the others' midpoint), plus subtle breathing + weight sway.
+        others = [k for k in range(len(chars)) if k != ci]
+        center_o = np.mean([positions[k] for k in others], axis=0) if others else positions[ci]
+        tgt = np.where((spk == ci)[:, None], center_o[None, :],
+                       np.stack([positions[s] for s in spk]))
+        ang = np.arctan2(tgt[:, 0] - x, tgt[:, 1] - z)      # world angle to target
+        hy = (ang - yaw + np.pi) % (2 * np.pi) - np.pi
+        hy = _ma(np.clip(hy, -0.7, 0.7))                    # smooth so it doesn't snap on cuts
+        bp = np.tile(body0, (total_F, 1)).copy()
+        bp[:, 11 * 3 + 1] += 0.45 * hy                      # neck yaw toward speaker
+        bp[:, 14 * 3 + 1] += 0.55 * hy                      # head yaw toward speaker
+        bp[:, 5 * 3 + 0] += 0.012 * np.sin(2 * np.pi * 0.22 * tline)   # breathing
+        go = np.tile([[0.0, yaw, 0.0]], (total_F, 1)).astype(np.float32)
+        go[:, 2] += 0.015 * np.sin(2 * np.pi * 0.13 * tline + ci)      # subtle weight sway
         kw = dict(
             betas=torch.from_numpy(np.tile(betas, (total_F, 1))),
-            global_orient=torch.from_numpy(np.tile([[0.0, yaw, 0.0]], (total_F, 1)).astype(np.float32)),
-            body_pose=torch.from_numpy(np.tile(body0, (total_F, 1))),
+            global_orient=torch.from_numpy(go),
+            body_pose=torch.from_numpy(bp.astype(np.float32)),
             transl=torch.from_numpy(np.tile([[x, 0.0, z]], (total_F, 1)).astype(np.float32)),
             jaw_pose=torch.from_numpy(jaw),             # no `expression` (inert on SMPL-X)
             leye_pose=torch.from_numpy(leye), reye_pose=torch.from_numpy(reye),
