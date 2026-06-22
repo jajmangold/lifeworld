@@ -42,6 +42,8 @@ def parse_args():
     ap.add_argument("--no-shadows", action="store_true", help="disable shadow maps")
     ap.add_argument("--framing", default="full", choices=["full", "medium", "face", "head"],
                     help="shot size: full body / waist-up / face+shoulders / head-only close-up")
+    ap.add_argument("--tex-size", type=int, default=1024,
+                    help="downscale textures to NxN on load (0=full); 4K re-upload/frame is the bottleneck")
     return ap.parse_args()
 
 
@@ -155,7 +157,11 @@ def main():
             with np.load(a.uv) as u:
                 uv = u["uv_coordinates"]
             tex_imgs = [Image.open(p).convert("RGB") for p in paths]
-            print(f"[render] textured: uv={uv.shape} {len(tex_imgs)} texture(s)")
+            if a.tex_size and tex_imgs and tex_imgs[0].width > a.tex_size:
+                # 4K textures are re-uploaded to the GPU every frame (the render bottleneck);
+                # at full-body 720p the face is ~80px so 1024 is plenty. ~16x less upload.
+                tex_imgs = [im.resize((a.tex_size, a.tex_size), Image.LANCZOS) for im in tex_imgs]
+            print(f"[render] textured: uv={uv.shape} {len(tex_imgs)} texture(s) @ {tex_imgs[0].size}")
     if not tex_imgs:
         print("[render] clay (no texture)")
 
@@ -194,7 +200,7 @@ def main():
             scene.add(lt, pose=pose)
         color, _ = r.render(scene, flags=flags)
         imageio.imwrite(os.path.join(a.out_dir, f"frame_{fi:04d}.png"), color)
-        if fi % 12 == 0:
+        if fi % 24 == 0:
             print(f"[render] frame {fi+1}/{F}")
     r.delete()
     print(f"[render] done -> {a.out_dir} ({F} frames)")
