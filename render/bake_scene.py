@@ -12,6 +12,7 @@ PYTHONPATH=/work (sampl) so face.talk resolves.
 """
 import argparse
 import json
+import os
 import numpy as np
 import torch
 import smplx
@@ -62,6 +63,15 @@ def main():
     def _ma(v, k=9):
         return np.convolve(np.pad(v, k // 2, mode="edge"), np.ones(k) / k, "valid")[:len(v)]
 
+    def load_ts(path, Fb):
+        """TalkSHOW params (N,265 @30fps) -> body_pose(Fb,63)+L/R hand(Fb,45) resampled.
+        Layout: jaw0:3 leye3:6 reye6:9 global9:12 body12:75 lhand75:120 rhand120:165 expr165:."""
+        p = np.load(path).astype(np.float32); N = len(p)
+        xi = np.linspace(0, N - 1, Fb); x = np.arange(N)
+        def rs(lo, hi):
+            return np.stack([np.interp(xi, x, p[:, c]) for c in range(lo, hi)], 1).astype(np.float32)
+        return rs(12, 75), rs(75, 120), rs(120, 165)
+
     body0 = apose()
     all_verts = []; all_mouth = []; all_gate = []; mfaces = mcolors = None
     for ci, ch in enumerate(chars):
@@ -83,7 +93,7 @@ def main():
 
         g = ch.get("gender", "neutral")
         model = smplx.create(a.model_dir, model_type="smplx", gender=g, num_betas=10,
-                             use_pca=False, flat_hand_mean=True, batch_size=total_F)
+                             use_pca=False, flat_hand_mean=False, batch_size=total_F)
         betas = np.zeros((1, 10), np.float32)
         bv = np.asarray(ch.get("betas", []), np.float32)
         betas[0, :min(10, len(bv))] = bv[:10]
@@ -102,12 +112,31 @@ def main():
         bp[:, 11 * 3 + 1] += 0.45 * hy                      # neck yaw toward speaker
         bp[:, 14 * 3 + 1] += 0.55 * hy                      # head yaw toward speaker
         bp[:, 5 * 3 + 0] += 0.012 * np.sin(2 * np.pi * 0.22 * tline)   # breathing
+        lh = np.zeros((total_F, 45), np.float32)            # rest = mean hand (flat_hand_mean=False)
+        rh = np.zeros((total_F, 45), np.float32)
+        # speaking beats: drive body + hands with TalkSHOW co-speech gestures (keep our yaw,
+        # position, A2F jaw). Blend over a short ramp so it doesn't pop at beat edges.
+        off2 = 0; gest = "idle"
+        for bi, b in enumerate(beats):
+            Fb = beat_F[bi]
+            tsp = b["audio"].replace(".wav", ".ts.npy")
+            if b["speaker"] == ci and os.path.exists(tsp):
+                tb, tlh, trh = load_ts(tsp, Fb)
+                R = min(8, Fb // 3); w = np.ones(Fb, np.float32)
+                if R > 0:
+                    w[:R] = np.linspace(0, 1, R); w[-R:] = np.linspace(1, 0, R)
+                w = w[:, None]; seg = slice(off2, off2 + Fb)
+                bp[seg] = (1 - w) * bp[seg] + w * tb
+                lh[seg] = w * tlh; rh[seg] = w * trh
+                gest = "talkshow"
+            off2 += Fb
         go = np.tile([[0.0, yaw, 0.0]], (total_F, 1)).astype(np.float32)
         go[:, 2] += 0.015 * np.sin(2 * np.pi * 0.13 * tline + ci)      # subtle weight sway
         kw = dict(
             betas=torch.from_numpy(np.tile(betas, (total_F, 1))),
             global_orient=torch.from_numpy(go),
             body_pose=torch.from_numpy(bp.astype(np.float32)),
+            left_hand_pose=torch.from_numpy(lh), right_hand_pose=torch.from_numpy(rh),
             transl=torch.from_numpy(np.tile([[x, 0.0, z]], (total_F, 1)).astype(np.float32)),
             jaw_pose=torch.from_numpy(jaw),             # no `expression` (inert on SMPL-X)
             leye_pose=torch.from_numpy(leye), reye_pose=torch.from_numpy(reye),
@@ -125,7 +154,7 @@ def main():
                                            yaw_rad=yaw)
         all_mouth.append(mvp); all_gate.append(jaw[:, 0])
         all_verts.append(v)
-        print(f"  {ch['name']}: gender={g} pos=({x},{z}) yaw={ch.get('yaw_deg',0)}")
+        print(f"  {ch['name']}: gender={g} pos=({x},{z}) yaw={ch.get('yaw_deg',0)} gestures={gest}")
 
     verts = np.stack(all_verts, 0)                          # (P, F, V, 3)
     faces = smplx.create(a.model_dir, model_type="smplx", gender="neutral").faces.astype(np.int64)

@@ -129,6 +129,18 @@ def main():
              "lifeworld-a2f", "python3", "render/a2f_lipsync.py", "--a2f", "/a2f",
              "--manifest", "/asset/output/scene/a2f_manifest.json"])
 
+        # 1c. co-speech gestures via TalkSHOW (audio -> body+hands params, CPU). One process
+        # per line; bake_scene applies them during each speaker's beat (keeps our A2F mouth).
+        TS_DIR = f"{SAMPL}/tools/TalkSHOW"
+        for b in beats:
+            base = os.path.basename(b["wav_host"])[:-4]
+            run(["docker", "run", "--rm", "-v", f"{TS_DIR}:/ts", "-v", f"{SCENE}:/audio", "sampl:dev",
+                 "bash", "-c",
+                 "cd /ts; export PYTHONPATH=/ts/pydeps:$PYTHONPATH HF_HOME=/ts/hf-cache; "
+                 '"$SAMPL_VENV/bin/python" scripts/talkshow_infer.py --infer --stand --whole_body '
+                 f"--config_file ./config/body_pixel.json --audio_file /audio/{base}.wav "
+                 f"--out /audio/{base}.ts.npy"])
+
         # 2. scene config for the baker
         chars = [{"name": c["name"], "gender": c["gender"], "betas": c["betas"],
                   "pos": c["pos"], "yaw_deg": c["yaw_deg"]} for c in CAST]
