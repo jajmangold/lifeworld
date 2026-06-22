@@ -24,8 +24,10 @@ from mouth_parts import build_mouth
 
 def apose():
     r = np.zeros((1, 21, 3), np.float32)
-    r[0, 15] = [0.0, 0.0, -1.0]      # shoulders down out of T-pose
-    r[0, 16] = [0.0, 0.0, 1.0]
+    r[0, 15] = [0.0, 0.0, -1.05]     # shoulders down out of T-pose
+    r[0, 16] = [0.0, 0.0, 1.05]
+    r[0, 17] = [0.0, 0.0, -0.35]     # elbows: bring forearms in so arms hang naturally
+    r[0, 18] = [0.0, 0.0, 0.35]      # (straight T-shoulders alone leave arms splayed out)
     return r.reshape(1, 63)
 
 

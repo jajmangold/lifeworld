@@ -204,14 +204,14 @@ def main():
     bg = [float(x) for x in a.bg.split(",")]
 
     cam = pyrender.PerspectiveCamera(yfov=yfov, aspectRatio=a.res_x / a.res_y)
-    # 3-ish point key/fill/rim
+    # warm, soft, fairly even key/fill/rim — high key so its shadow falls down (not a big
+    # diagonal across the back wall); strong fill to keep contrast low (soft look).
+    warm = np.array([1.0, 0.95, 0.88])
+    cool = np.array([0.9, 0.94, 1.0])
     lights = [
-        (pyrender.DirectionalLight(color=np.ones(3), intensity=3.5),
-         _aim([2, 2, 3], center)),
-        (pyrender.DirectionalLight(color=np.ones(3), intensity=1.5),
-         _aim([-3, 1, 2], center)),
-        (pyrender.DirectionalLight(color=np.ones(3), intensity=1.2),
-         _aim([0, 2, -3], center)),
+        (pyrender.DirectionalLight(color=warm, intensity=3.0), _aim([1.5, 3.2, 2.5], center)),
+        (pyrender.DirectionalLight(color=cool, intensity=2.2), _aim([-2.5, 1.6, 2.2], center)),
+        (pyrender.DirectionalLight(color=warm, intensity=1.0), _aim([0, 2.6, -2.5], center)),
     ]
     r = pyrender.OffscreenRenderer(a.res_x, a.res_y)
     flags = pyrender.RenderFlags.NONE
