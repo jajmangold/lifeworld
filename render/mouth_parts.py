@@ -95,13 +95,22 @@ def build_mouth(verts, lip_idx, jaw_rad, yaw_rad=0.0, params=None, model=None):
     su = Rv[lip_skull]; sj = Rv[lip_jaw]
     uc = su[su[:, 1] <= np.percentile(su[:, 1], 35)].mean(0)   # inner upper lip
     lc = sj[sj[:, 1] >= np.percentile(sj[:, 1], 65)].mean(0)   # inner lower lip
-    Lr = Rv[lip]; _, _, Vt = np.linalg.svd(Lr - Lr.mean(0), full_matrices=False)
-    right, normal = Vt[0], Vt[2]                    # mouth horizontal axis / surface normal
-    if (uc + lc) / 2 @ normal < Rv[skull_v].mean(0) @ normal:
-        normal = -normal                           # point OUTWARD (away from head)
-    up = np.cross(normal, right); up /= np.linalg.norm(up)
-    right = np.cross(up, normal)
-    Wm = float(np.ptp(Lr @ right))                 # mouth width
+    # Anatomical axes (PCA is unreliable on a near-closed mouth — the thin vertical slit makes
+    # it swap the vertical and depth axes -> sideways teeth). up = lower->upper lip; right from
+    # the head yaw, orthogonalized; normal = right x up, forced outward.
+    up = uc - lc
+    up = up / np.linalg.norm(up) if np.linalg.norm(up) > 1e-6 else np.array([0.0, 1.0, 0.0])
+    # right = widest lip-spread direction IN THE PLANE perpendicular to up (so it tracks the
+    # head's actual roll/turn at the rest frame; width >> depth there -> unambiguous).
+    Lc = Rv[lip] - Rv[lip].mean(0)
+    Lc = Lc - np.outer(Lc @ up, up)                # drop the up component
+    _, _, Vt = np.linalg.svd(Lc, full_matrices=False)
+    right = Vt[0]; right = right - (right @ up) * up; right /= np.linalg.norm(right)
+    normal = np.cross(right, up); normal /= np.linalg.norm(normal)
+    if ((uc + lc) / 2 - Rv[skull_v].mean(0)) @ normal < 0:
+        normal = -normal                           # point OUTWARD (away from head centre)
+    right = np.cross(up, normal)                    # re-orthonormalize
+    Wm = float(np.ptp(Rv[lip] @ right))            # mouth width
 
     def strip(anchor, hsign, part):
         xw = part["w"] * gw * Wm * 0.5
