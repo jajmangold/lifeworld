@@ -1,10 +1,9 @@
 {
-  "_help": "Auto-fit mouth. Per part: v0,v1 = vertical band in lip-space (0=lower lip, 1=upper lip), scales with the opening each frame; z = depth behind lip (m, more negative=deeper); w = width vs mouth width; color RGB. Globals: width (overall x scale), anchor_up (shift band up/down), gate (jaw-open before teeth show). Tune live: render/teeth_viser.sh",
+  "_help": "Bone-rigged mouth. Upper teeth ride the SKULL, lower teeth+tongue ride the JAW, cavity bridges (opens with the jaw automatically). Per part: depth = recess behind lip (m, bigger=deeper), h = strip height (m), w = width vs mouth width, color RGB. Globals: width (x scale), gate (jaw-open before teeth show). Tune live: render/teeth_viser.sh",
   "width": 1.0,
-  "anchor_up": 0.0,
   "gate": 0.08,
-  "upper":  {"v0": 0.70, "v1": 1.00, "z": -0.004, "w": 0.95, "color": [236, 232, 222]},
-  "lower":  {"v0": 0.00, "v1": 0.30, "z": -0.008, "w": 0.85, "color": [220, 216, 205]},
-  "tongue": {"v0": 0.06, "v1": 0.55, "z": -0.013, "w": 0.72, "color": [178, 76, 80]},
-  "cavity": {"v0": -0.05, "v1": 1.05, "z": -0.022, "w": 1.05, "color": [22, 10, 12]}
+  "upper":  {"depth": 0.005, "h": 0.007, "w": 0.92, "color": [236, 232, 222]},
+  "lower":  {"depth": 0.005, "h": 0.007, "w": 0.85, "color": [220, 216, 205]},
+  "tongue": {"depth": 0.011, "h": 0.012, "w": 0.72, "color": [178, 76, 80]},
+  "cavity": {"depth": 0.018, "h": 0.0, "w": 1.05, "color": [22, 10, 12]}
 }

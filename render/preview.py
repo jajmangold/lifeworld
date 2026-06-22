@@ -76,7 +76,7 @@ def main():
     faces = model.faces.astype(np.int64)
     # teeth + tongue + dark interior (SMPL-X has none -> open mouth is a black void)
     mv, mf, mcol = build_mouth(verts, lip_region(model, betas_row)["idx"], face["jaw"][:, 0],
-                               yaw_rad=yaw)
+                               yaw_rad=yaw, model=model)
 
     uv = np.load(a.uv)["uv_coordinates"] if os.path.exists(a.uv) else None
     tex = Image.open(a.texture).convert("RGB") if os.path.exists(a.texture) else None

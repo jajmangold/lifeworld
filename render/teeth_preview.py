@@ -60,7 +60,7 @@ def main():
     for yaw_deg, label in [(0, "front"), (16, "3/4")]:
         yaw = np.radians(yaw_deg)
         v, face = bake(arkit, model, betas, F, fps, yaw)
-        mv, mf, mcol = build_mouth(v, lip_region(model, betas[0])["idx"], face["jaw"][:, 0], yaw_rad=yaw)
+        mv, mf, mcol = build_mouth(v, lip_region(model, betas[0])["idx"], face["jaw"][:, 0], yaw_rad=yaw, model=model)
         fi = int(face["jaw"][:, 0].argmax())                        # most-open frame
         yfov, cam_pose, center = frame_camera(v, "head", 1.0)
         s = pyrender.Scene(bg_color=[0.05, 0.05, 0.07, 1.0], ambient_light=[0.4, 0.4, 0.42])

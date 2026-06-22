@@ -1,25 +1,32 @@
 #!/usr/bin/env python3
-"""Teeth + tongue + dark interior for the SMPL-X mouth (which has none -> open mouth renders
-as a black void). AUTO-FITS the mouth opening every frame: each part is anchored between the
-actual upper and lower lip (measured per frame), so it resizes/repositions with the mouth and
-rides with the head — one set of params works on every frame, not just one.
+"""Teeth + tongue + dark interior for the SMPL-X mouth, RIGGED TO THE BONES.
 
-Params (render/mouth_params.json), per part: v0,v1 = vertical band in lip-space where 0=lower
-lip, 1=upper lip (so upper teeth ~0.7-1.0, lower ~0-0.3); z = depth behind the lip (m, more
-negative=deeper); w = width vs the mouth width; color RGB. Globals: width (overall x scale),
-anchor_up (shift the band), gate (jaw-open before teeth show, applied at render). Tune live:
-render/teeth_viser.sh -> http://<host>:8772
+SMPL-X has no teeth; an open mouth renders as a black void. We add a tiny mesh and attach it
+to the actual skeleton via the model's skinning weights:
+  - upper teeth  -> the SKULL bone (head joint 15) — fixed to the cranium/maxilla
+  - lower teeth + tongue -> the JAW bone (joint 22) — rotate with the mandible (jaw_pose)
+  - cavity -> top edge on the skull, bottom edge on the jaw, so it STRETCHES open by itself
+Per frame, each bone's rigid transform is recovered by Kabsch-fitting its skinned verts
+(rest->frame). Placement (the gum lines / mouth width / face normal) is detected automatically
+from where those bones meet the lip region. So it opens with the real jaw and never detaches —
+no per-frame fitting, minimal params. Falls back to a lip-centroid estimate if no model given.
+
+Params (render/mouth_params.json), per part: depth = recess behind the lip (m), h = strip
+height (m), w = width vs mouth width, color RGB. Globals: width (x scale), gate (jaw-open
+before teeth show, applied at render).
 """
 import json
 import os
 import numpy as np
 
+JAW_J, HEAD_J = 22, 15
+
 DEFAULTS = {
-    "width": 1.0, "anchor_up": 0.0, "gate": 0.08,
-    "upper":  {"v0": 0.70, "v1": 1.00, "z": -0.004, "w": 0.95, "color": [236, 232, 222]},
-    "lower":  {"v0": 0.00, "v1": 0.30, "z": -0.008, "w": 0.85, "color": [220, 216, 205]},
-    "tongue": {"v0": 0.06, "v1": 0.55, "z": -0.013, "w": 0.72, "color": [178, 76, 80]},
-    "cavity": {"v0": -0.05, "v1": 1.05, "z": -0.022, "w": 1.05, "color": [22, 10, 12]},
+    "width": 1.0, "gate": 0.08,
+    "upper":  {"depth": 0.005, "h": 0.007, "w": 0.92, "color": [236, 232, 222]},
+    "lower":  {"depth": 0.005, "h": 0.007, "w": 0.85, "color": [220, 216, 205]},
+    "tongue": {"depth": 0.011, "h": 0.012, "w": 0.72, "color": [178, 76, 80]},
+    "cavity": {"depth": 0.018, "h": 0.0, "w": 1.05, "color": [22, 10, 12]},
 }
 _PARAMS_PATH = os.path.join(os.path.dirname(__file__), "mouth_params.json")
 
@@ -38,56 +45,114 @@ def load_params(path=None):
     return p
 
 
-def build_mouth(verts, lip_idx, jaw_rad, yaw_rad=0.0, params=None):
-    P = params or load_params()
-    F = verts.shape[0]
-    L = verts[:, lip_idx, :]                         # (F, n, 3)
-    var = L[:, :, 1].var(0)                          # per-lip-vert vertical motion
-    upper_m = var <= np.percentile(var, 40)          # upper lip (rigid w/ head, low jaw motion)
-    lower_m = var >= np.percentile(var, 65)          # lower lip (drops with the jaw)
-    if upper_m.sum() < 3: upper_m = np.ones(len(var), bool)
-    if lower_m.sum() < 3: lower_m = np.ones(len(var), bool)
+def _kabsch(A, B):
+    """Rigid R,t with B ~= A @ R.T + t (maps rest set A to frame set B)."""
+    ca = A.mean(0); cb = B.mean(0)
+    H = (A - ca).T @ (B - cb)
+    U, _, Vt = np.linalg.svd(H)
+    d = np.sign(np.linalg.det(Vt.T @ U.T))
+    R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
+    return R, cb - R @ ca
 
-    # head orientation per frame from the skull shell above the mouth (3D-spread -> stable Kabsch)
-    rig = np.where(verts[0, :, 1] >= cy_thresh(verts))[0]
-    P0 = verts[0, rig]; P0c = P0.mean(0); P0d = P0 - P0c
-    cyaw, syaw = np.cos(yaw_rad), np.sin(yaw_rad)
-    r0 = np.array([cyaw, 0.0, -syaw]); f0 = np.array([syaw, 0.0, cyaw])   # yaw-rotated X / Z
 
-    up, lo, to, ca = P["upper"], P["lower"], P["tongue"], P["cavity"]
-    parts = (up, lo, to, ca)
-    aup = float(P.get("anchor_up", 0.0)); wmul = float(P.get("width", 1.0))
-    MV = np.empty((F, 16, 3), np.float32)
-    for i in range(F):
-        Pi = verts[i, rig]; Pic = Pi.mean(0)
-        H = P0d.T @ (Pi - Pic)
-        U, _, Vt = np.linalg.svd(H)
-        R = Vt.T @ np.diag([1.0, 1.0, np.sign(np.linalg.det(Vt.T @ U.T))]) @ U.T
-        ri = R @ r0; fi = R @ f0                      # mouth right / outward axes this frame
-        Lp = L[i]
-        uc = Lp[upper_m].mean(0); lc = Lp[lower_m].mean(0)   # upper/lower lip centres (auto)
-        axis = uc - lc                                # lower->upper; length = current opening
-        W = float((Lp @ ri).max() - (Lp @ ri).min())  # mouth width this frame
-        out16 = []
-        for part in parts:
-            xw = part["w"] * wmul * W * 0.5
-            base = ri * xw
-            p0 = lc + (part["v0"] + aup) * axis + part["z"] * fi   # bottom edge (v0)
-            p1 = lc + (part["v1"] + aup) * axis + part["z"] * fi   # top edge (v1)
-            out16 += [p0 - base, p0 + base, p1 + base, p1 - base]
-        MV[i] = np.array(out16, np.float32)
-
+def _faces_cols(parts):
     faces = []
-    for g in range(4):                               # 4 quads -> 8 tris
+    for g in range(4):
         b = g * 4
         faces += [[b, b + 1, b + 2], [b, b + 2, b + 3]]
-    faces = np.array(faces, np.int64)
+    faces += [[f[0], f[2], f[1]] for f in faces]      # back-faces too (double-sided)
     col = np.zeros((16, 3), np.uint8)
     for g, part in enumerate(parts):
         col[g * 4:g * 4 + 4] = part["color"]
+    return np.array(faces, np.int64), col
+
+
+def build_mouth(verts, lip_idx, jaw_rad, yaw_rad=0.0, params=None, model=None):
+    P = params or load_params()
+    F = verts.shape[0]
+    lip = np.asarray(lip_idx)
+    up_p, lo_p, to_p, ca_p = P["upper"], P["lower"], P["tongue"], P["cavity"]
+    parts = (up_p, lo_p, to_p, ca_p)
+    gw = float(P.get("width", 1.0))
+    jr = np.clip(np.asarray(jaw_rad, np.float32), 0, None) if jaw_rad is not None else np.zeros(F)
+
+    if model is None:
+        return _fallback(verts, lip, jr, yaw_rad, parts, gw)
+
+    Wt = model.lbs_weights
+    Wt = Wt.detach().cpu().numpy() if hasattr(Wt, "detach") else np.asarray(Wt)
+    jaw_v = np.where(Wt[:, JAW_J] > 0.5)[0]
+    skull_v = np.where(Wt[:, HEAD_J] > 0.5)[0]
+    lip_jaw = lip[np.isin(lip, jaw_v)]            # lower lip (on the jaw bone)
+    lip_skull = lip[np.isin(lip, skull_v)]        # upper lip (on the skull bone)
+    if len(jaw_v) < 8 or len(skull_v) < 8 or len(lip_jaw) < 3 or len(lip_skull) < 3:
+        return _fallback(verts, lip, jr, yaw_rad, parts, gw)
+
+    rest_i = int(jr.argmin())                      # most-closed frame -> clean gum lines
+    Rv = verts[rest_i]
+    # INNER lip edges (the mouth line), not the lip-band centroids (which sit ~2cm apart even
+    # closed): upper lip's lowest verts / lower lip's highest verts.
+    su = Rv[lip_skull]; sj = Rv[lip_jaw]
+    uc = su[su[:, 1] <= np.percentile(su[:, 1], 35)].mean(0)   # inner upper lip
+    lc = sj[sj[:, 1] >= np.percentile(sj[:, 1], 65)].mean(0)   # inner lower lip
+    Lr = Rv[lip]; _, _, Vt = np.linalg.svd(Lr - Lr.mean(0), full_matrices=False)
+    right, normal = Vt[0], Vt[2]                    # mouth horizontal axis / surface normal
+    if (uc + lc) / 2 @ normal < Rv[skull_v].mean(0) @ normal:
+        normal = -normal                           # point OUTWARD (away from head)
+    up = np.cross(normal, right); up /= np.linalg.norm(up)
+    right = np.cross(up, normal)
+    Wm = float(np.ptp(Lr @ right))                 # mouth width
+
+    def strip(anchor, hsign, part):
+        xw = part["w"] * gw * Wm * 0.5
+        base = anchor - part["depth"] * normal
+        edge = base + hsign * part["h"] * up
+        return [base - xw * right, base + xw * right, edge + xw * right, edge - xw * right]
+
+    upper = strip(uc, -1.0, up_p)                   # extends DOWN from the upper gum
+    lower = strip(lc, +1.0, lo_p)                   # extends UP from the lower gum
+    tongue = strip(lc, +1.0, to_p)
+    xwc = ca_p["w"] * gw * Wm * 0.5; dc = ca_p["depth"]
+    cavity = [uc - dc * normal - xwc * right, uc - dc * normal + xwc * right,   # top -> skull
+              lc - dc * normal + xwc * right, lc - dc * normal - xwc * right]   # bottom -> jaw
+    rest16 = np.array(upper + lower + tongue + cavity, np.float32)
+    bone = np.array([0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1])   # 0=skull, 1=jaw
+
+    def sub(a, n=400):
+        return a if len(a) <= n else a[np.linspace(0, len(a) - 1, n).astype(int)]
+    ss, js = sub(skull_v), sub(jaw_v)
+    s0, j0 = verts[rest_i, ss], verts[rest_i, js]
+    MV = np.empty((F, 16, 3), np.float32)
+    for i in range(F):
+        Rs, ts = _kabsch(s0, verts[i, ss])
+        Rj, tj = _kabsch(j0, verts[i, js])
+        MV[i, bone == 0] = rest16[bone == 0] @ Rs.T + ts
+        MV[i, bone == 1] = rest16[bone == 1] @ Rj.T + tj
+
+    faces, col = _faces_cols(parts)
     return MV, faces, col
 
 
-def cy_thresh(verts):
-    y = verts[0, :, 1]
-    return np.percentile(y, 90)                       # skull/forehead/eyes region
+def _fallback(verts, lip, jr, yaw_rad, parts, gw):
+    """No model: estimate gum lines from jaw-variance lip split, no bone rig (best-effort)."""
+    L = verts[:, lip, :]
+    var = L[:, :, 1].var(0)
+    upper_m = var <= np.percentile(var, 40); lower_m = var >= np.percentile(var, 65)
+    cyaw, syaw = np.cos(yaw_rad), np.sin(yaw_rad)
+    r0 = np.array([cyaw, 0.0, -syaw]); n0 = np.array([syaw, 0.0, cyaw]); up0 = np.array([0.0, 1.0, 0.0])
+    up_p, lo_p, to_p, ca_p = parts
+    MV = np.empty((len(verts), 16, 3), np.float32)
+    for i in range(len(verts)):
+        uc = L[i, upper_m].mean(0); lc = L[i, lower_m].mean(0)
+        Wm = float(np.ptp(L[i] @ r0))
+
+        def strip(anchor, hsign, part):
+            xw = part["w"] * gw * Wm * 0.5; base = anchor - part["depth"] * n0
+            edge = base + hsign * part["h"] * up0
+            return [base - xw * r0, base + xw * r0, edge + xw * r0, edge - xw * r0]
+        xwc = ca_p["w"] * gw * Wm * 0.5; dc = ca_p["depth"]
+        MV[i] = np.array(strip(uc, -1, up_p) + strip(lc, 1, lo_p) + strip(lc, 1, to_p) +
+                         [uc - dc * n0 - xwc * r0, uc - dc * n0 + xwc * r0,
+                          lc - dc * n0 + xwc * r0, lc - dc * n0 - xwc * r0], np.float32)
+    faces, col = _faces_cols(parts)
+    return MV, faces, col

@@ -89,7 +89,7 @@ def main():
 
     # teeth/tongue geometry (rendered when mouth open) so the open mouth isn't a void
     mv, mf, mcol = build_mouth(verts, lip_region(model, np.full(10, float(a.shape), np.float32))["idx"],
-                               face["jaw"][:, 0])
+                               face["jaw"][:, 0], model=model)
     np.savez_compressed(a.out, verts=verts, faces=faces, rot_x=0.0,
                         mouth_verts=mv, mouth_faces=mf, mouth_colors=mcol,
                         mouth_gate=face["jaw"][:, 0])

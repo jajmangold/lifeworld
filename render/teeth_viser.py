@@ -74,10 +74,8 @@ srv.scene.set_up_direction("+y")
 
 GUI = {}
 PARTS = ["upper", "lower", "tongue", "cavity"]
-GFIELDS = [("width", 0.5, 1.5, 0.01), ("anchor_up", -0.3, 0.3, 0.01),
-           ("gate", 0.0, 0.5, 0.01)]
-PFIELDS = [("v0", -0.2, 1.2, 0.02), ("v1", -0.2, 1.2, 0.02),
-           ("z", -0.05, 0.01, 0.001), ("w", 0.2, 1.6, 0.01)]
+GFIELDS = [("width", 0.5, 1.5, 0.01), ("gate", 0.0, 0.5, 0.01)]
+PFIELDS = [("depth", 0.0, 0.03, 0.001), ("h", 0.0, 0.02, 0.0005), ("w", 0.2, 1.6, 0.01)]
 init = load_params()
 
 state = {"frame": PEAK, "play": False, "mvs": None, "mf": None, "mcol": None}
@@ -94,7 +92,7 @@ def collect():
 def rebuild_teeth():
     p = collect()
     json.dump({**load_params(), **p}, open(PARAMS_OUT, "w"), indent=2)
-    state["mvs"], state["mf"], state["mcol"] = build_mouth(VERTS, LIP, JAW, yaw_rad=0.0, params=p)
+    state["mvs"], state["mf"], state["mcol"] = build_mouth(VERTS, LIP, JAW, yaw_rad=0.0, params=p, model=model)
     show(state["frame"])
 
 
