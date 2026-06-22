@@ -1,9 +1,9 @@
 {
-  "_help": "Bone-rigged mouth. Upper teeth ride the SKULL, lower teeth+tongue ride the JAW, cavity bridges. Per part: depth = recess behind lip (m), h = strip height (m), w = width vs mouth width (keep <~0.6 so corners don't poke past the lens-shaped opening), color RGB. Globals: width, gate. Tune: render/teeth_viser.sh",
+  "_help": "Bone-rigged mouth. Upper teeth ride SKULL, lower teeth+tongue ride JAW, cavity bridges. Per part: depth=recess behind lip (m), h=strip height (m), w=width vs mouth width (<~0.6), color RGB. Globals: width, gate. Tune: render/teeth_viser.sh",
   "width": 1.0,
   "gate": 0.08,
-  "upper":  {"depth": 0.007, "h": 0.007, "w": 0.55, "color": [236, 232, 222]},
-  "lower":  {"depth": 0.007, "h": 0.007, "w": 0.50, "color": [220, 216, 205]},
-  "tongue": {"depth": 0.012, "h": 0.012, "w": 0.44, "color": [178, 76, 80]},
-  "cavity": {"depth": 0.016, "h": 0.0, "w": 0.62, "color": [22, 10, 12]}
+  "upper":  {"depth": 0.007, "h": 0.0045, "w": 0.50, "color": [236, 232, 222]},
+  "lower":  {"depth": 0.007, "h": 0.0045, "w": 0.46, "color": [220, 216, 205]},
+  "tongue": {"depth": 0.012, "h": 0.008,  "w": 0.40, "color": [178, 76, 80]},
+  "cavity": {"depth": 0.016, "h": 0.0,    "w": 0.58, "color": [22, 10, 12]}
 }
