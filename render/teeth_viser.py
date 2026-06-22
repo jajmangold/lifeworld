@@ -26,16 +26,28 @@ PARAMS_OUT = "/lw/render/mouth_params.json"
 FPS = 24
 SKIN = (150, 110, 86)
 
-print("baking Theo...", flush=True)
+print("baking Theo (with gestures)...", flush=True)
 arkit = json.load(open(ARKIT))
 F = max(2, round(len(arkit["weights"]) / float(arkit["fps"]) * FPS))
-model = smplx.create("/work/models", model_type="smplx", gender="male", num_betas=10,
-                     use_pca=False, flat_hand_mean=True, batch_size=F)
 betas = np.zeros((1, 10), np.float32)
 face = drive(arkit, F, FPS)
+# bake WITH Theo's TalkSHOW gestures so the head MOVES like the cinematic -> the tuner shows
+# real motion (and any poke-through), not a static A-pose. flat_hand_mean=False to honor hands.
+model = smplx.create("/work/models", model_type="smplx", gender="male", num_betas=10,
+                     use_pca=False, flat_hand_mean=False, batch_size=F)
 rest = np.zeros((1, 21, 3), np.float32); rest[0, 15] = [0, 0, -1.0]; rest[0, 16] = [0, 0, 1.0]
+bp = np.tile(rest.reshape(1, 63), (F, 1)).astype(np.float32)
+lh = np.zeros((F, 45), np.float32); rh = np.zeros((F, 45), np.float32)
+tsp = ARKIT.replace(".arkit.json", ".ts.npy")
+if os.path.exists(tsp):
+    ts = np.load(tsp).astype(np.float32); N = len(ts)
+    xi = np.linspace(0, N - 1, F); x = np.arange(N)
+    def _rs(lo, hi):
+        return np.stack([np.interp(xi, x, ts[:, c]) for c in range(lo, hi)], 1).astype(np.float32)
+    bp, lh, rh = _rs(12, 75), _rs(75, 120), _rs(120, 165)
 out = model(betas=torch.from_numpy(np.tile(betas, (F, 1))), global_orient=torch.zeros((F, 3)),
-            body_pose=torch.from_numpy(np.tile(rest.reshape(1, 63), (F, 1))),
+            body_pose=torch.from_numpy(bp),
+            left_hand_pose=torch.from_numpy(lh), right_hand_pose=torch.from_numpy(rh),
             jaw_pose=torch.from_numpy(face["jaw"]),
             leye_pose=torch.from_numpy(face["leye"]), reye_pose=torch.from_numpy(face["reye"]))
 VERTS = out.vertices.detach().numpy().astype(np.float32)
