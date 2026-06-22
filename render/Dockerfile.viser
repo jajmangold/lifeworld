@@ -1,0 +1,5 @@
+# Live 3D teeth tuner: viser (browser three.js) + smplx/torch to bake the body once.
+# No GPU/EGL needed — the browser renders; the server just streams geometry.
+FROM lifeworld-preview
+RUN pip3 install --no-cache-dir viser==1.0.30
+WORKDIR /work
