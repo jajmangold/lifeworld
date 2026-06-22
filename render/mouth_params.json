@@ -1,36 +1,10 @@
 {
-  "_help": "Teeth/mouth tuning. y = vertical band relative to the mouth line (+up, m). z = depth behind the lip surface (more negative = deeper). w = width vs half the mouth. color = RGB 0-255. gate = how open before teeth show. Tune live: render/teeth_viser.sh -> http://<host>:8772",
-  "width": 0.55,
-  "y_drop": 0.007,
-  "anchor_up": 0.004,
-  "drop_scale": 0.05,
+  "_help": "Auto-fit mouth. Per part: v0,v1 = vertical band in lip-space (0=lower lip, 1=upper lip), scales with the opening each frame; z = depth behind lip (m, more negative=deeper); w = width vs mouth width; color RGB. Globals: width (overall x scale), anchor_up (shift band up/down), gate (jaw-open before teeth show). Tune live: render/teeth_viser.sh",
+  "width": 1.0,
+  "anchor_up": 0.0,
   "gate": 0.08,
-  "upper": {
-    "y0": 0.001,
-    "y1": 0.010,
-    "z": -0.004,
-    "w": 0.96,
-    "color": [236, 232, 222]
-  },
-  "lower": {
-    "y0": -0.010,
-    "y1": -0.001,
-    "z": -0.011,
-    "w": 0.86,
-    "color": [220, 216, 205]
-  },
-  "tongue": {
-    "y0": -0.010,
-    "y1": -0.001,
-    "z": -0.013,
-    "w": 0.82,
-    "color": [178, 76, 80]
-  },
-  "cavity": {
-    "y0": -0.013,
-    "y1": 0.010,
-    "z": -0.024,
-    "w": 1.10,
-    "color": [22, 10, 12]
-  }
+  "upper":  {"v0": 0.70, "v1": 1.00, "z": -0.004, "w": 0.95, "color": [236, 232, 222]},
+  "lower":  {"v0": 0.00, "v1": 0.30, "z": -0.008, "w": 0.85, "color": [220, 216, 205]},
+  "tongue": {"v0": 0.06, "v1": 0.55, "z": -0.013, "w": 0.72, "color": [178, 76, 80]},
+  "cavity": {"v0": -0.05, "v1": 1.05, "z": -0.022, "w": 1.05, "color": [22, 10, 12]}
 }

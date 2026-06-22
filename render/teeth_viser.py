@@ -74,10 +74,9 @@ srv.scene.set_up_direction("+y")
 
 GUI = {}
 PARTS = ["upper", "lower", "tongue", "cavity"]
-GFIELDS = [("width", 0.0, 1.0, 0.01), ("y_drop", -0.03, 0.03, 0.001),
-           ("anchor_up", -0.02, 0.02, 0.001), ("drop_scale", 0.0, 0.15, 0.005),
+GFIELDS = [("width", 0.5, 1.5, 0.01), ("anchor_up", -0.3, 0.3, 0.01),
            ("gate", 0.0, 0.5, 0.01)]
-PFIELDS = [("y0", -0.03, 0.03, 0.0005), ("y1", -0.03, 0.03, 0.0005),
+PFIELDS = [("v0", -0.2, 1.2, 0.02), ("v1", -0.2, 1.2, 0.02),
            ("z", -0.05, 0.01, 0.001), ("w", 0.2, 1.6, 0.01)]
 init = load_params()
 
