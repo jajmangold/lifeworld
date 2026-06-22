@@ -58,23 +58,41 @@ def build_mouth(verts, lip_idx, jaw_rad, yaw_rad=0.0, params=None):
                          [cx + xw, y1, zlip + z], [cx - xw, y1, zlip + z]], np.float32)
 
     up, lo, to, ca = P["upper"], P["lower"], P["tongue"], P["cavity"]
-    upper = quad(cy + up["y0"], cy + up["y1"], up["z"], up["w"])    # static (skull)
-    MV = []
-    for i in range(F):
-        di = float(d[i])                                            # jaw-follow drop
-        lower = quad(cy + lo["y0"] - di, cy + lo["y1"] - di, lo["z"], lo["w"])
-        tongue = quad(cy + to["y0"] - di, cy + to["y1"] - di, to["z"], to["w"])
-        cavity = quad(cy + ca["y0"] - di, cy + ca["y1"], ca["z"], ca["w"])  # bottom drops
-        MV.append(np.concatenate([upper, lower, tongue, cavity], 0))
-    MV = np.stack(MV, 0).astype(np.float32)                         # (F, 16, 3)
-
-    # rotate parts about Y around the mouth centre to track the head's yaw (else on an angled
-    # head they face the camera and clip through the nose/cheek).
+    # Frame-0 rest geometry (4 quads, 16 verts), oriented to the frame-0 head yaw.
+    mv0 = np.concatenate([
+        quad(cy + up["y0"], cy + up["y1"], up["z"], up["w"]),       # upper teeth (skull)
+        quad(cy + lo["y0"], cy + lo["y1"], lo["z"], lo["w"]),       # lower teeth
+        quad(cy + to["y0"], cy + to["y1"], to["z"], to["w"]),       # tongue
+        quad(cy + ca["y0"], cy + ca["y1"], ca["z"], ca["w"]),       # cavity
+    ], 0).astype(np.float32)
     if yaw_rad:
         c, s = np.cos(yaw_rad), np.sin(yaw_rad)
-        dx = MV[..., 0] - cx; dz = MV[..., 2] - zlip
-        MV[..., 0] = cx + c * dx + s * dz
-        MV[..., 2] = zlip - s * dx + c * dz
+        dx = mv0[:, 0] - cx; dz = mv0[:, 2] - zlip
+        mv0[:, 0] = cx + c * dx + s * dz
+        mv0[:, 2] = zlip - s * dx + c * dz
+
+    # Rigidly attach the mouth parts to the HEAD per frame. The head moves a LOT with TalkSHOW
+    # gestures (lean/turn ~15cm); anchoring at frame 0 left the teeth floating behind the head.
+    # Kabsch-fit the skull cap (top-of-head verts: rigid, no jaw/expression) frame0 -> frame i,
+    # apply that transform to mv0, then drop the lower teeth/tongue/cavity-bottom with the jaw.
+    # rigid set = the head SHELL above the mouth (forehead, skull, sides) — 3D-spread so the
+    # Kabsch rotation is well-conditioned (a flat skull cap alone is near-planar -> unstable).
+    rig = np.where(verts[0, :, 1] >= cy + 0.02)[0]
+    if rig.size < 30:
+        rig = np.where(verts[0, :, 1] >= np.percentile(verts[0, :, 1], 88))[0]
+    P0 = verts[0, rig]; P0c = P0.mean(0); P0d = P0 - P0c
+    drop_idx = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]                   # lower, tongue, cavity-bottom
+    down = np.array([0.0, -1.0, 0.0], np.float32)
+    MV = np.empty((F, 16, 3), np.float32)
+    for i in range(F):
+        Pi = verts[i, rig]; Pic = Pi.mean(0)
+        H = P0d.T @ (Pi - Pic)
+        U, _, Vt = np.linalg.svd(H)
+        dsign = np.sign(np.linalg.det(Vt.T @ U.T))
+        R = Vt.T @ np.diag([1.0, 1.0, dsign]) @ U.T                 # frame0 -> frame i rotation
+        mvi = mv0 @ R.T + (Pic - R @ P0c)                          # rigid follow head
+        mvi[drop_idx] += float(d[i]) * (R @ down)                  # jaw-follow drop (head-local)
+        MV[i] = mvi
 
     faces = []
     for g in range(4):                                             # 4 quads -> 8 tris
