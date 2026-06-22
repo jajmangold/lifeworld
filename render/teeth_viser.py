@@ -61,6 +61,14 @@ PEAK = int(JAW.argmax())
 # centre + scale so the head sits nicely / coords in metres are small -> fine for viser
 CTR = VERTS[PEAK].mean(0)
 
+# textured head so the tuner matches the cinematic (real lips/skin), not a flat skin colour
+from PIL import Image
+UVR = np.load("/work/assets/smplx_uv_2023.npz")["uv_coordinates"].astype(np.float32)
+TEXIMG = Image.open("/work/assets/smplx_texture_m_alb_eyefix.png").convert("RGB").resize((1024, 1024))
+LOOPS = FACES.shape[0] * 3
+F2 = np.arange(LOOPS, dtype=np.int64).reshape(-1, 3)
+UV2 = UVR[:LOOPS]
+
 srv = viser.ViserServer(host="0.0.0.0", port=8772)
 srv.scene.set_up_direction("+y")
 
@@ -93,8 +101,10 @@ def rebuild_teeth():
 
 def show(fi):
     state["frame"] = fi
-    srv.scene.add_mesh_simple("/theo", VERTS[fi] - CTR, FACES, color=SKIN,
-                              flat_shading=False, side="double")
+    v2 = (VERTS[fi] - CTR)[FACES].reshape(-1, 3)        # per-corner for textured UVs
+    body = trimesh.Trimesh(v2, F2, process=False,
+                           visual=trimesh.visual.TextureVisuals(uv=UV2, image=TEXIMG))
+    srv.scene.add_mesh_trimesh("/theo", body)
     if state["mvs"] is not None and JAW[fi] > GUI["gate"].value:
         mt = trimesh.Trimesh(state["mvs"][fi] - CTR, state["mf"],
                              vertex_colors=np.asarray(state["mcol"], np.uint8), process=False)
