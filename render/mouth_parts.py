@@ -33,14 +33,17 @@ def build_mouth(verts, lip_idx, jaw_rad, drop_scale=0.06, width=0.42, y_drop=0.0
         return np.array([[cx - xw, y0, z], [cx + xw, y0, z],
                          [cx + xw, y1, z], [cx - xw, y1, z]], np.float32)
 
-    upper = quad(cy + 0.002, cy + 0.0055, zlip - 0.013, hw * 0.92)   # dim upper teeth, recessed
+    # upper teeth slightly FORWARD + clearly visible so the bite reads 'upper in front'
+    # (when they were dim/recessed, the full lower lip dominated -> underbite look).
+    upper = quad(cy + 0.0015, cy + 0.0075, zlip - 0.006, hw * 0.95)
     MV = []
     for i in range(F):
         di = float(d[i])
-        tongue = quad(cy - 0.007 - di, cy - 0.001 - di, zlip - 0.018, hw * 0.7)
-        cavity = quad(cy - 0.010 - di, cy + 0.009, zlip - 0.024, hw * 1.0)   # dark, deepest
-        MV.append(np.concatenate([upper, tongue, cavity], 0))
-    MV = np.stack(MV, 0).astype(np.float32)                 # (F, 12, 3)
+        lower = quad(cy - 0.0075 - di, cy - 0.0025 - di, zlip - 0.013, hw * 0.9)  # behind upper
+        tongue = quad(cy - 0.007 - di, cy - 0.001 - di, zlip - 0.019, hw * 0.7)
+        cavity = quad(cy - 0.011 - di, cy + 0.010, zlip - 0.026, hw * 1.0)   # dark, deepest
+        MV.append(np.concatenate([upper, lower, tongue, cavity], 0))
+    MV = np.stack(MV, 0).astype(np.float32)                 # (F, 16, 3)
 
     # rotate parts about Y around the mouth centre to track the head's yaw (else they
     # face the camera on an angled head and clip through the nose/cheek).
