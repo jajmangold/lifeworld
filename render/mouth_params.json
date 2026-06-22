@@ -1,9 +1,9 @@
 {
-  "_help": "Bone-rigged mouth. Upper teeth ride SKULL, lower teeth+tongue ride JAW, cavity bridges. Per part: depth=recess behind lip (m), h=strip height (m), w=width vs mouth width (<~0.6), color RGB. Globals: width, gate. Tune: render/teeth_viser.sh",
-  "width": 1.0,
+  "_help": "Bone-rigged CURVED teeth (follow the gum arch). Per part: depth=recess behind lip (m, small=bumps the lips), h=row height into mouth (m), color RGB. Global width = arch span fraction of mouth width; gate = jaw-open to show. (per-part w is unused now; arch span is global.) Tune: render/teeth_viser.sh",
+  "width": 0.82,
   "gate": 0.08,
-  "upper":  {"depth": 0.007, "h": 0.0045, "w": 0.50, "color": [236, 232, 222]},
-  "lower":  {"depth": 0.007, "h": 0.0045, "w": 0.46, "color": [220, 216, 205]},
-  "tongue": {"depth": 0.012, "h": 0.008,  "w": 0.40, "color": [178, 76, 80]},
-  "cavity": {"depth": 0.016, "h": 0.0,    "w": 0.58, "color": [22, 10, 12]}
+  "upper":  {"depth": 0.003, "h": 0.005, "w": 0.9, "color": [236, 232, 222]},
+  "lower":  {"depth": 0.003, "h": 0.005, "w": 0.9, "color": [220, 216, 205]},
+  "tongue": {"depth": 0.009, "h": 0.010, "w": 0.7, "color": [178, 76, 80]},
+  "cavity": {"depth": 0.014, "h": 0.0,   "w": 0.9, "color": [22, 10, 12]}
 }

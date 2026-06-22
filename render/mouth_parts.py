@@ -110,33 +110,63 @@ def build_mouth(verts, lip_idx, jaw_rad, yaw_rad=0.0, params=None, model=None):
     right = np.cross(up, normal)
     Wm = float(np.ptp(Rv[lip] @ right))            # mouth width
 
-    def strip(anchor, hsign, part):
-        xw = part["w"] * gw * Wm * 0.5
-        base = anchor - part["depth"] * normal
-        edge = base + hsign * part["h"] * up
-        return [base - xw * right, base + xw * right, edge + xw * right, edge - xw * right]
+    # ---- curved gum lines (the dental arch): sample the inner lip edge across the mouth so the
+    # teeth BEND with the gumline (front forward, sides receding) instead of a flat bar ----
+    N = 7                                          # segments per arch
 
-    upper = strip(uc, -1.0, up_p)                   # extends DOWN from the upper gum
-    lower = strip(lc, +1.0, lo_p)                   # extends UP from the lower gum
-    tongue = strip(lc, +1.0, to_p)
-    xwc = ca_p["w"] * gw * Wm * 0.5; dc = ca_p["depth"]
-    cavity = [uc - dc * normal - xwc * right, uc - dc * normal + xwc * right,   # top -> skull
-              lc - dc * normal + xwc * right, lc - dc * normal - xwc * right]   # bottom -> jaw
-    rest16 = np.array(upper + lower + tongue + cavity, np.float32)
-    bone = np.array([0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1])   # 0=skull, 1=jaw
+    def gum_line(pts, inner_sign, wfrac):
+        proj = pts @ right
+        c = 0.5 * (np.percentile(proj, 5) + np.percentile(proj, 95))
+        half = 0.5 * (np.percentile(proj, 95) - np.percentile(proj, 5)) * wfrac
+        out = []
+        for x in np.linspace(c - half, c + half, N + 1):
+            m = np.abs(proj - x) <= max(half / N, 1e-4) * 1.6
+            sub = pts[m] if m.sum() >= 2 else pts[np.argsort(np.abs(proj - x))[:4]]
+            spu = sub @ up
+            sel = sub[spu <= np.percentile(spu, 45)] if inner_sign < 0 else sub[spu >= np.percentile(spu, 55)]
+            out.append(sel.mean(0) if len(sel) else sub.mean(0))
+        return np.array(out, np.float32)           # (N+1, 3), follows the arch in 3D
+
+    ug = gum_line(su, -1, gw)                       # upper gum (skull), against the upper lip
+    lg = gum_line(sj, +1, gw)                       # lower gum (jaw); shared span so cavity aligns
+
+    # each part = two polylines (rowA against the lip, rowB extending into the mouth); the gum
+    # points already carry the arch curve + the tiny recess keeps them just behind the lips.
+    def strip(line, hsign, part):
+        a = line - part["depth"] * normal
+        b = a + hsign * part["h"] * up
+        return a, b
+    geo = [(strip(ug, -1, up_p), 0, 0, up_p["color"]),    # upper teeth: skull/skull
+           (strip(lg, +1, lo_p), 1, 1, lo_p["color"]),    # lower teeth: jaw/jaw
+           (strip(lg, +1, to_p), 1, 1, to_p["color"]),    # tongue: jaw/jaw
+           ((ug - ca_p["depth"] * normal, lg - ca_p["depth"] * normal), 0, 1, ca_p["color"])]  # cavity: skull/jaw
+
+    rest, bones, cols, faces = [], [], [], []
+    for (rowA, rowB), boneA, boneB, color in geo:
+        base = len(rest)
+        rest += list(rowA) + list(rowB)
+        bones += [boneA] * (N + 1) + [boneB] * (N + 1)
+        cols += [color] * (2 * (N + 1))
+        for k in range(N):
+            a0, a1 = base + k, base + k + 1
+            b0, b1 = base + N + 1 + k, base + N + 1 + k + 1
+            faces += [[a0, a1, b1], [a0, b1, b0]]
+    faces += [[f[0], f[2], f[1]] for f in faces]   # double-sided
+    rest = np.array(rest, np.float32)
+    bones = np.array(bones); faces = np.array(faces, np.int64)
+    col = np.array(cols, np.uint8)
 
     def sub(a, n=400):
         return a if len(a) <= n else a[np.linspace(0, len(a) - 1, n).astype(int)]
     ss, js = sub(skull_v), sub(jaw_v)
     s0, j0 = verts[rest_i, ss], verts[rest_i, js]
-    MV = np.empty((F, 16, 3), np.float32)
+    M = len(rest)
+    MV = np.empty((F, M, 3), np.float32)
     for i in range(F):
         Rs, ts = _kabsch(s0, verts[i, ss])
         Rj, tj = _kabsch(j0, verts[i, js])
-        MV[i, bone == 0] = rest16[bone == 0] @ Rs.T + ts
-        MV[i, bone == 1] = rest16[bone == 1] @ Rj.T + tj
-
-    faces, col = _faces_cols(parts)
+        MV[i, bones == 0] = rest[bones == 0] @ Rs.T + ts
+        MV[i, bones == 1] = rest[bones == 1] @ Rj.T + tj
     return MV, faces, col
 
 
