@@ -1,12 +1,36 @@
 {
-  "_help": "Teeth/mouth tuning. Edit, then run render/teeth.sh to preview. y = vertical band relative to the mouth line (+up, metres). z = depth behind the lip surface (more negative = further back / deeper in the mouth). w = width as a fraction of half the mouth width. color = RGB 0-255. Lower teeth/tongue drop with the jaw; the cavity's bottom drops.",
-  "width": 0.42,
+  "_help": "Teeth/mouth tuning. y = vertical band relative to the mouth line (+up, m). z = depth behind the lip surface (more negative = deeper). w = width vs half the mouth. color = RGB 0-255. gate = how open the mouth must be before teeth show. Tune live: render/teeth_viser.sh -> http://<host>:8772",
+  "width": 0.52,
   "y_drop": 0.009,
   "anchor_up": 0.004,
   "drop_scale": 0.06,
-  "gate": 0.12,
-  "upper":  {"y0": 0.0005, "y1": 0.0090, "z": -0.004, "w": 0.92, "color": [218, 214, 200]},
-  "lower":  {"y0": -0.0095, "y1": -0.0010, "z": -0.011, "w": 0.82, "color": [214, 209, 195]},
-  "tongue": {"y0": -0.008,  "y1": -0.002,  "z": -0.016, "w": 0.66, "color": [156, 84, 88]},
-  "cavity": {"y0": -0.011,  "y1": 0.010,   "z": -0.026, "w": 1.05, "color": [24, 11, 13]}
+  "gate": 0.08,
+  "upper": {
+    "y0": 0.001,
+    "y1": 0.008,
+    "z": -0.004,
+    "w": 0.92,
+    "color": [236, 232, 222]
+  },
+  "lower": {
+    "y0": -0.009,
+    "y1": -0.001,
+    "z": -0.011,
+    "w": 0.82,
+    "color": [220, 216, 205]
+  },
+  "tongue": {
+    "y0": -0.009,
+    "y1": -0.001,
+    "z": -0.016,
+    "w": 0.70,
+    "color": [170, 72, 76]
+  },
+  "cavity": {
+    "y0": -0.012,
+    "y1": 0.010,
+    "z": -0.024,
+    "w": 1.05,
+    "color": [22, 10, 12]
+  }
 }
