@@ -43,13 +43,17 @@ def main():
     chars = cfg["characters"]
     beats = cfg["beats"]
 
-    # per-beat frame counts from each arkit clip's duration
+    # per-beat frame counts from the AUDIO duration (NOT the arkit length): A2F sometimes
+    # returns a slightly short clip, and keying frames off it made the video beat shorter than
+    # the audio -> drift that accumulates across beats (later lines ~230ms out of sync). drive()
+    # resamples the arkit over these frames (holding its last value if it's short).
+    import wave
     beat_arkit, beat_F = [], []
     for b in beats:
-        ak = json.load(open(b["arkit"]))
-        T = len(ak["weights"]); src = float(ak.get("fps", 30.0))
-        Fb = max(1, round((T / src) * fps))
-        beat_arkit.append(ak); beat_F.append(Fb)
+        beat_arkit.append(json.load(open(b["arkit"])))
+        w = wave.open(b["audio"], "rb")
+        Fb = max(1, round(w.getnframes() / w.getframerate() * fps))
+        beat_F.append(Fb)
     total_F = sum(beat_F)
     print(f"[bake_scene] {len(chars)} chars, {len(beats)} beats, {total_F} frames @ {fps}fps")
 
