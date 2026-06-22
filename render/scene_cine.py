@@ -159,7 +159,7 @@ def main():
          "-v", f"{SAMPL}:/work", "-v", f"{BOT}:/lw", "-w", "/work", "lifeworld-pyrender", "bash", "-lc",
          "python3 /lw/render/render_smplx.py --clip /work/output/scene/clip.npz "
          "--out-dir /work/output/scene/frames --uv /work/assets/smplx_uv_2023.npz "
-         f"--textures {tex_arg} --framing full --rot-x 0 --res-x 1280 --res-y 720 && "
+         f"--textures {tex_arg} --framing full --rot-x 0 --room --res-x 1280 --res-y 720 && "
          "ffmpeg -y -loglevel error -f concat -safe 0 -i /work/output/scene/audio.txt "
          "-c:a aac /work/output/scene/audio.aac && "
          f"ffmpeg -y -loglevel error -framerate {FPS} -i /work/output/scene/frames/frame_%04d.png "

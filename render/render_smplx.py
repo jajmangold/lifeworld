@@ -44,6 +44,8 @@ def parse_args():
                     help="shot size: full body / waist-up / face+shoulders / head-only close-up")
     ap.add_argument("--tex-size", type=int, default=1024,
                     help="downscale textures to NxN on load (0=full); 4K re-upload/frame is the bottleneck")
+    ap.add_argument("--room", action="store_true",
+                    help="warm interior set (floor+walls) instead of void/bare ground")
     return ap.parse_args()
 
 
@@ -58,6 +60,39 @@ def ground_plane(all_verts, half=4.0):
     mat = pyrender.MetallicRoughnessMaterial(
         baseColorFactor=[0.32, 0.33, 0.36, 1.0], metallicFactor=0.0, roughnessFactor=1.0)
     return pyrender.Mesh.from_trimesh(tm, material=mat, smooth=False)
+
+
+def _quad(corners, color, rough=1.0):
+    v = np.array(corners, np.float32)
+    f = np.array([[0, 1, 2], [0, 2, 3]], np.int64)
+    tm = trimesh.Trimesh(v, f, process=False)
+    mat = pyrender.MetallicRoughnessMaterial(
+        baseColorFactor=color + [1.0], metallicFactor=0.0, roughnessFactor=rough,
+        doubleSided=True)               # double-sided so winding/normals don't matter
+    return pyrender.Mesh.from_trimesh(tm, material=mat, smooth=False)
+
+
+def room_set(all_verts):
+    """A simple warm interior: floor + back wall + two side walls around the cast, so
+    they stand in a room instead of a black void. Catches shadows; gives perspective."""
+    p = all_verts.reshape(-1, 3)
+    y0 = float(p[:, 1].min())
+    cx, cz = float(p[:, 0].mean()), float(p[:, 2].mean())
+    W = max(3.2, (float(p[:, 0].max()) - float(p[:, 0].min())) * 1.3)   # room half-width
+    back = cz - 1.4                     # back wall (behind cast; camera looks -Z)
+    front = cz + 3.2                    # floor extends toward camera
+    h = 2.7                             # wall height
+    floor = [0.40, 0.36, 0.32]; wall = [0.56, 0.50, 0.45]; side = [0.50, 0.45, 0.40]
+    return [
+        _quad([[cx - W, y0, back], [cx + W, y0, back],
+               [cx + W, y0, front], [cx - W, y0, front]], floor),                 # floor
+        _quad([[cx - W, y0, back], [cx + W, y0, back],
+               [cx + W, y0 + h, back], [cx - W, y0 + h, back]], wall),            # back wall
+        _quad([[cx - W, y0, back], [cx - W, y0, front],
+               [cx - W, y0 + h, front], [cx - W, y0 + h, back]], side),           # left wall
+        _quad([[cx + W, y0, back], [cx + W, y0, front],
+               [cx + W, y0 + h, front], [cx + W, y0 + h, back]], side),           # right wall
+    ]
 
 
 def rot_x_mat(deg):
@@ -182,13 +217,18 @@ def main():
     flags = pyrender.RenderFlags.NONE
     if not a.no_shadows:
         flags |= pyrender.RenderFlags.SHADOWS_DIRECTIONAL
-    ground = None if a.no_ground else ground_plane(verts)
+    if a.room:
+        set_meshes = room_set(verts)
+        bg = [0.10, 0.09, 0.08]                 # warm so wall edges blend
+        ambient = [0.45, 0.43, 0.40]
+    else:
+        set_meshes = [] if a.no_ground else [ground_plane(verts)]
+        ambient = [0.35, 0.35, 0.38]
 
     for fi in range(F):
-        scene = pyrender.Scene(bg_color=bg + [1.0],
-                               ambient_light=[0.35, 0.35, 0.38])
-        if ground is not None:
-            scene.add(ground)
+        scene = pyrender.Scene(bg_color=bg + [1.0], ambient_light=ambient)
+        for sm in set_meshes:
+            scene.add(sm)
         for p in range(P):
             tex = tex_imgs[p % len(tex_imgs)] if tex_imgs else None
             scene.add(build_mesh(verts[p, fi], faces, uv, tex, a.flip_v))
