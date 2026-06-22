@@ -118,16 +118,22 @@ def main():
                               "a2f_id": c["a2f_id"], "dur": dur})
                 print(f"  {c['name']}: {say}  ({dur:.1f}s)")
 
-        # 1b. Audio2Face-3D lip-sync for every line in ONE container session (CMP/V100, ORT)
-        manifest = f"{SCENE}/a2f_manifest.json"
-        json.dump([{"wav": b["audio"].replace("/work", "/asset"),
-                    "out": b["arkit"].replace("/work", "/asset"),
-                    "identity": b["a2f_id"]} for b in beats], open(manifest, "w"))
-        run(["docker", "run", "--rm", "--gpus", "device=1",
-             "-e", "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
-             "-v", f"{SAMPL}:/asset", "-v", f"{BOT}:/lw", "-v", f"{A2F_DIR}:/a2f", "-w", "/lw",
-             "lifeworld-a2f", "python3", "render/a2f_lipsync.py", "--a2f", "/a2f",
-             "--manifest", "/asset/output/scene/a2f_manifest.json"])
+        # 1b. lip-sync: audio -> ARKit-52 per line. LAM (:8202) is the default — an A/B vs A2F
+        # showed LAM tracks the audio better (corr ~0.52 vs ~0.36) and stays full-length (A2F
+        # returned short clips -> drift). Use A2F instead with `--a2f`.
+        if "--a2f" in sys.argv:
+            manifest = f"{SCENE}/a2f_manifest.json"
+            json.dump([{"wav": b["audio"].replace("/work", "/asset"),
+                        "out": b["arkit"].replace("/work", "/asset"),
+                        "identity": b["a2f_id"]} for b in beats], open(manifest, "w"))
+            run(["docker", "run", "--rm", "--gpus", "device=1",
+                 "-e", "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
+                 "-v", f"{SAMPL}:/asset", "-v", f"{BOT}:/lw", "-v", f"{A2F_DIR}:/a2f", "-w", "/lw",
+                 "lifeworld-a2f", "python3", "render/a2f_lipsync.py", "--a2f", "/a2f",
+                 "--manifest", "/asset/output/scene/a2f_manifest.json"])
+        else:
+            for b in beats:                              # LAM audio->ARKit (host service :8202)
+                lam(b["wav_host"], b["arkit"].replace("/work", SAMPL))
 
         # 1c. co-speech gestures via TalkSHOW (audio -> body+hands params, CPU). One process
         # per line; bake_scene applies them during each speaker's beat (keeps our A2F mouth).
