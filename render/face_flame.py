@@ -31,7 +31,7 @@ class FlameDriver:
         self.bs2jaw = np.load(f"{mdir}/bs2jaw.npy")   # (52,3)
         self.bs2eye = np.load(f"{mdir}/bs2eye.npy")   # (52,6) leye(3)+reye(3)
 
-    def drive(self, arkit, F, fps, smooth=3):
+    def drive(self, arkit, F, fps, smooth=3, gain=0.4):
         names = arkit["arkit_names"]
         W = np.asarray(arkit["weights"], np.float32)
         src = float(arkit.get("fps", 30.0)); T = len(W)
@@ -46,7 +46,9 @@ class FlameDriver:
             k = np.ones(smooth) / smooth
             mp = np.stack([np.convolve(np.pad(mp[:, c], smooth // 2, "edge"), k, "valid")[:F]
                            for c in range(52)], 1)
-        exp = (mp @ self.bs2exp).astype(np.float32)        # (F,100) FLAME expression
+        # gain<1 tames over-driven coeffs (MP_2_FLAME peaks ~|8|; SMPL-X distorts above ~|3|,
+        # worst on the high-order components during speech). jaw kept full-strength.
+        exp = (mp @ self.bs2exp).astype(np.float32) * gain  # (F,100) FLAME expression
         jaw = (mp @ self.bs2jaw).astype(np.float32)        # (F,3)  jaw pose
         eye = (mp @ self.bs2eye).astype(np.float32)        # (F,6)  eye pose
         return exp, jaw, eye[:, :3].copy(), eye[:, 3:6].copy()
