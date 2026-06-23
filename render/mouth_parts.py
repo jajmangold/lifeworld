@@ -67,7 +67,17 @@ def _faces_cols(parts):
     return np.array(faces, np.int64), col
 
 
-def build_mouth(verts, lip_idx, jaw_rad, yaw_rad=0.0, params=None, model=None):
+def _atlas_uv(nparts, N):
+    """UVs into a vertical 4-band atlas (band per part: upper/lower teeth, tongue, cavity).
+    rowA = gum/lip edge -> top of band; rowB = into the mouth -> bottom of band."""
+    uv = []
+    for p in range(nparts):
+        uv += [[c / N, (p + 0.10) / nparts] for c in range(N + 1)]   # rowA
+        uv += [[c / N, (p + 0.90) / nparts] for c in range(N + 1)]   # rowB
+    return np.array(uv, np.float32)
+
+
+def build_mouth(verts, lip_idx, jaw_rad, yaw_rad=0.0, params=None, model=None, return_uv=False):
     P = params or load_params()
     F = verts.shape[0]
     lip = np.asarray(lip_idx)
@@ -77,7 +87,7 @@ def build_mouth(verts, lip_idx, jaw_rad, yaw_rad=0.0, params=None, model=None):
     jr = np.clip(np.asarray(jaw_rad, np.float32), 0, None) if jaw_rad is not None else np.zeros(F)
 
     if model is None:
-        return _fallback(verts, lip, jr, yaw_rad, parts, gw)
+        return _fallback(verts, lip, jr, yaw_rad, parts, gw, return_uv)
 
     Wt = model.lbs_weights
     Wt = Wt.detach().cpu().numpy() if hasattr(Wt, "detach") else np.asarray(Wt)
@@ -167,10 +177,12 @@ def build_mouth(verts, lip_idx, jaw_rad, yaw_rad=0.0, params=None, model=None):
         Rj, tj = _kabsch(j0, verts[i, js])
         MV[i, bones == 0] = rest[bones == 0] @ Rs.T + ts
         MV[i, bones == 1] = rest[bones == 1] @ Rj.T + tj
+    if return_uv:
+        return MV, faces, col, _atlas_uv(len(geo), N)
     return MV, faces, col
 
 
-def _fallback(verts, lip, jr, yaw_rad, parts, gw):
+def _fallback(verts, lip, jr, yaw_rad, parts, gw, return_uv=False):
     """No model: estimate gum lines from jaw-variance lip split, no bone rig (best-effort)."""
     L = verts[:, lip, :]
     var = L[:, :, 1].var(0)
@@ -192,4 +204,9 @@ def _fallback(verts, lip, jr, yaw_rad, parts, gw):
                          [uc - dc * n0 - xwc * r0, uc - dc * n0 + xwc * r0,
                           lc - dc * n0 + xwc * r0, lc - dc * n0 - xwc * r0], np.float32)
     faces, col = _faces_cols(parts)
+    if return_uv:
+        uv = []
+        for p in range(4):
+            uv += [[0, (p + .1) / 4], [1, (p + .1) / 4], [1, (p + .9) / 4], [0, (p + .9) / 4]]
+        return MV, faces, col, np.array(uv, np.float32)
     return MV, faces, col
