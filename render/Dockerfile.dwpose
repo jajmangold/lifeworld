@@ -1,0 +1,2 @@
+FROM champ:volta
+RUN pip install --no-cache-dir onnxruntime matplotlib

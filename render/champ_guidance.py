@@ -51,34 +51,10 @@ dist = bodyH / (2 * np.tan(0.5 * YFOV)) * 1.12
 cam_pose = np.eye(4); cam_pose[:3, 3] = [ctr[0], ctr[1], ctr[2] + dist]
 Rcam = cam_pose[:3, :3]
 os.makedirs(f"{OUT}/depth", exist_ok=True); os.makedirs(f"{OUT}/normal", exist_ok=True)
-os.makedirs(f"{OUT}/dwpose", exist_ok=True)
-# ---- dwpose (OpenPose-18) from SMPL-X joints, projected with the SAME camera ----
-from PIL import ImageDraw
-FY = 1.0 / np.tan(YFOV / 2); ASP = W / H
-def project(p):                                          # world (N,3) -> pixel (N,2)
-    pc = p - cam_pose[:3, 3]; z = -pc[:, 2]
-    u = (pc[:, 0] * FY / ASP / z + 1) / 2 * W
-    vv = (1 - pc[:, 1] * FY / z) / 2 * H
-    return np.stack([u, vv], 1)
-# SMPL-X joint idx -> OpenPose-18 (nose,neck,Rsh,Rel,Rwr,Lsh,Lel,Lwr,Rhip,Rkn,Rank,Lhip,Lkn,Lank,Reye,Leye,Rear,Lear)
-SX = [None, 12, 17, 19, 21, 16, 18, 20, 2, 5, 8, 1, 4, 7, 24, 23, 24, 23]
-LIMBS = [(1,2),(1,5),(2,3),(3,4),(5,6),(6,7),(1,8),(8,9),(9,10),(1,11),(11,12),(12,13),(1,0),(0,14),(14,16),(0,15),(15,17)]
-COLORS = [(255,0,0),(255,85,0),(255,170,0),(255,255,0),(170,255,0),(85,255,0),(0,255,0),(0,255,85),
-          (0,255,170),(0,255,255),(0,170,255),(0,85,255),(0,0,255),(85,0,255),(170,0,255),(255,0,255),(255,0,170)]
-for fi in range(F):
-    pj = project(J[fi])
-    kp = np.zeros((18, 2), np.float32)
-    kp[0] = (pj[23] + pj[24]) / 2                        # nose ~ between eyes
-    for o in range(1, 18):
-        kp[o] = pj[SX[o]]
-    im = Image.new("RGB", (W, H), (0, 0, 0)); dr = ImageDraw.Draw(im)
-    for li, (a_, b_) in enumerate(LIMBS):
-        dr.line([tuple(kp[a_]), tuple(kp[b_])], fill=COLORS[li], width=4)
-    for o in range(18):
-        x, y = kp[o]; dr.ellipse([x - 3, y - 3, x + 3, y + 3], fill=COLORS[o % len(COLORS)])
-    im.save(f"{OUT}/dwpose/{fi:04d}.png")
+os.makedirs(f"{OUT}/lit", exist_ok=True)   # lit grey human; run real DWPose on this -> dwpose/ (proper _all format)
 r = pyrender.OffscreenRenderer(W, H)
 cam = pyrender.PerspectiveCamera(yfov=YFOV, aspectRatio=W / H)
+litlight = pyrender.DirectionalLight(color=np.ones(3), intensity=3.5)
 vn_all = None
 for fi in range(F):
     tm = trimesh.Trimesh(v[fi], faces, process=False)
@@ -100,5 +76,10 @@ for fi in range(F):
     else:
         gi = np.zeros(dd.shape, np.uint8)
     Image.fromarray(gi).convert("RGB").save(f"{OUT}/depth/{fi:04d}.png")
+    # ---- lit pass: mid-grey human on grey bg (DWPose annotates this for proper dwpose) ----
+    sl = pyrender.Scene(bg_color=[0.5, 0.5, 0.5, 1], ambient_light=[0.6, 0.6, 0.6])
+    sl.add(pyrender.Mesh.from_trimesh(trimesh.Trimesh(v[fi], faces, process=False), smooth=True))
+    sl.add(cam, pose=cam_pose); sl.add(litlight, pose=cam_pose)
+    Image.fromarray(r.render(sl)[0]).save(f"{OUT}/lit/{fi:04d}.png")
 r.delete()
 print("GUIDANCE_OK", OUT, "frames", F, f"{W}x{H}")
