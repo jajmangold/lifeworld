@@ -20,10 +20,8 @@ ap.add_argument("--kimodo", required=True); ap.add_argument("--arkit", required=
 ap.add_argument("--audio", required=True); ap.add_argument("--gender", default="male")
 ap.add_argument("--tex", required=True); ap.add_argument("--uv", required=True)
 ap.add_argument("--mappings", default="/work/tools/mp2flame/mappings")
-ap.add_argument("--mouth-atlas", default="/work/assets/mouth_atlas.png")  # photoreal inner-mouth texture
 ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--out", required=True)
 ap.add_argument("--viseme-delay-ms", type=float, default=150.0)   # LAM visemes lead audio; eye-tuned
-ap.add_argument("--jaw-gain", type=float, default=1.6)            # open the mouth wider (teeth separate)
 ap.add_argument("--pre-roll", type=float, default=0.6)            # idle beat (mouth closed) before speech
 a = ap.parse_args()
 
@@ -60,7 +58,6 @@ transl = (tr0 @ M.T).astype(np.float32)
 
 # ---- LAM/FLAME face, delayed vs audio (LAM visemes lead; eye-tuned). Neutral-fill the head. ----
 expr, jaw, leye, reye = FlameDriver(a.mappings).drive(json.load(open(a.arkit)), F, FPS, gain=0.4)
-jaw[:, 0] = np.clip(jaw[:, 0] * a.jaw_gain, 0, 0.5)      # open wider so upper/lower teeth separate
 DELAY = int(round(a.viseme_delay_ms / 1000.0 * FPS))
 if DELAY > 0:
     pad = lambda x: np.concatenate([np.zeros((DELAY,) + x.shape[1:], x.dtype), x[:-DELAY]], 0)
@@ -86,10 +83,7 @@ with torch.no_grad():
 faces = model.faces.astype(np.int64)
 uv = np.load(a.uv)["uv_coordinates"]; tex = Image.open(a.tex).convert("RGB")
 lip = lip_region(model, betas[0])["idx"]
-mv, mf, mcol, muv = build_mouth(v, lip, jaw[:, 0], model=model, return_uv=True)
-matlas = Image.open(a.mouth_atlas).convert("RGB")        # photoreal teeth/tongue/palate
-mouth_mat = trimesh.visual.material.PBRMaterial(baseColorTexture=matlas, metallicFactor=0.0,
-                                                roughnessFactor=0.32, doubleSided=True)  # wet sheen
+mv, mf, mcol = build_mouth(v, lip, jaw[:, 0], model=model)   # flat vertex-colored teeth (revert)
 
 # ---- medium shot: frame head down to ~mid-thigh, follow body, fixed distance ----
 ys = v[:, :, 1]; head = float(ys.max()); pelvis = float(np.median(ys))
@@ -103,9 +97,7 @@ for fi in range(F):
     s = pyrender.Scene(bg_color=[0.07, 0.07, 0.08, 1], ambient_light=[0.5, 0.5, 0.5])
     s.add(build_mesh(v[fi], faces, uv, tex))
     if jaw[fi, 0] > 0.05:
-        tmm = trimesh.Trimesh(mv[fi], mf, process=False)
-        tmm.visual = trimesh.visual.TextureVisuals(uv=muv, material=mouth_mat)
-        s.add(pyrender.Mesh.from_trimesh(tmm, smooth=False))
+        s.add(pyrender.Mesh.from_trimesh(trimesh.Trimesh(mv[fi], mf, vertex_colors=mcol, process=False), smooth=False))
     s.add(pyrender.PerspectiveCamera(yfov=YFOV, aspectRatio=540 / 720), pose=cam)
     s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=3.0), pose=_aim([ctr[0] + 1, ctr[1] + 2, ctr[2] + 2], ctr))
     s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=1.3), pose=_aim([ctr[0] - 2, ctr[1] + 1, ctr[2] + 1], ctr))
