@@ -23,16 +23,13 @@ ap.add_argument("--map-dir", default="/work/tools/kimodo/text_encoders/../../kim
 ap.add_argument("--mappings", default="/work/tools/mp2flame/mappings")
 ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--out", required=True)
 a = ap.parse_args()
-FPS = 24
-import wave
-wv = wave.open(a.audio); AUD = wv.getnframes() / wv.getframerate(); F = max(2, round(AUD * FPS))
-
-# ---- Kimodo body (AMASS Z-up -> our Y-up), resampled to F ----
+# ---- Kimodo body at NATIVE frame rate (do NOT resample rotations: linear-interpolating
+# axis-angle is invalid and flips the body sideways mid-clip). Render at Kimodo's fps. ----
 d = np.load(a.kimodo, allow_pickle=True)
-def rs(x):  # (N,D)->(F,D) time-resample
-    N = len(x); return np.stack([np.interp(np.linspace(0, N - 1, F), np.arange(N), x[:, c]) for c in range(x.shape[1])], 1).astype(np.float32)
-body = rs(d["pose_body"].astype(np.float32))          # (F,63)
-go0 = rs(d["root_orient"].astype(np.float32)); tr0 = rs(d["trans"].astype(np.float32))
+FPS = int(d["mocap_frame_rate"]) if "mocap_frame_rate" in d else 30
+body = d["pose_body"].astype(np.float32)              # (F,63) axis-angle, used as-is
+go0 = d["root_orient"].astype(np.float32); tr0 = d["trans"].astype(np.float32)
+F = len(body)
 
 def aa2mat(v):
     t = np.linalg.norm(v, axis=1, keepdims=True); t = np.clip(t, 1e-8, None); k = v / t
