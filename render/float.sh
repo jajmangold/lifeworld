@@ -13,6 +13,7 @@ server)
   docker rm -f "$NAME" 2>/dev/null || true
   docker run -d --name "$NAME" --gpus "\"device=$GPU\"" -e NVIDIA_DRIVER_CAPABILITIES=all \
     -e TORCH_HOME=/float/.torch -e HF_HOME=/float/.hf -e FLOAT_PORT=$PORT \
+    -e FLOAT_FACE_THR=${FLOAT_FACE_THR:-0.2} \
     -p $PORT:$PORT \
     -v "$FLOATDIR":/float -v "$IO":/io -w /float float:volta \
     python float_server.py
