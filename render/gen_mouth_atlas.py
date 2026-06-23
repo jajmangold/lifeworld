@@ -29,20 +29,20 @@ def teeth(top_enamel, bot_enamel, n_teeth=9):
         xc = int(k * W / n_teeth)
         for dx, f in [(-1, .55), (0, .4), (1, .55)]:
             xi = (xc + dx) % W; img[:, xi] *= f
-    # gum line: pinkish at the very top (where teeth meet gum)
-    g = np.linspace(1, 0, BH)[:, None, None] ** 3
-    img = img * (1 - g) + np.array([196, 132, 120])[None, None] * g
+    # no pink gum line — pure enamel; the real gum is hidden behind the lip anyway (user wants
+    # less gum). Keep just a faint warm tint at the very top edge.
+    g = (np.linspace(1, 0, BH)[:, None, None] ** 16) * 0.3
+    img = img * (1 - g) + np.array([210, 180, 165])[None, None] * g
     img += rng.normal(0, 4, img.shape)                    # subtle grain
     return img
 
 
 def tongue():
-    img = vgrad([165, 72, 82], [212, 120, 126])           # root(dark) -> tip(pink)
+    img = vgrad([78, 36, 40], [120, 60, 64])              # dim wet interior (not bright pink)
     x = np.arange(W)
     sulcus = np.exp(-((x - W / 2) / 6.0) ** 2)            # median groove down the middle
     img *= (1 - 0.35 * sulcus)[None, :, None]
-    img += rng.normal(0, 7, img.shape)                    # papillae stipple
-    img += 6 * (rng.random(img.shape) > 0.93)             # tiny highlights
+    img += rng.normal(0, 5, img.shape)                    # papillae stipple
     return img
 
 

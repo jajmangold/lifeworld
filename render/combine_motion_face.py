@@ -23,6 +23,7 @@ ap.add_argument("--mappings", default="/work/tools/mp2flame/mappings")
 ap.add_argument("--mouth-atlas", default="/work/assets/mouth_atlas.png")  # photoreal inner-mouth texture
 ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--out", required=True)
 ap.add_argument("--viseme-delay-ms", type=float, default=150.0)   # LAM visemes lead audio; eye-tuned
+ap.add_argument("--jaw-gain", type=float, default=1.6)            # open the mouth wider (teeth separate)
 ap.add_argument("--pre-roll", type=float, default=0.6)            # idle beat (mouth closed) before speech
 a = ap.parse_args()
 
@@ -59,6 +60,7 @@ transl = (tr0 @ M.T).astype(np.float32)
 
 # ---- LAM/FLAME face, delayed vs audio (LAM visemes lead; eye-tuned). Neutral-fill the head. ----
 expr, jaw, leye, reye = FlameDriver(a.mappings).drive(json.load(open(a.arkit)), F, FPS, gain=0.4)
+jaw[:, 0] = np.clip(jaw[:, 0] * a.jaw_gain, 0, 0.5)      # open wider so upper/lower teeth separate
 DELAY = int(round(a.viseme_delay_ms / 1000.0 * FPS))
 if DELAY > 0:
     pad = lambda x: np.concatenate([np.zeros((DELAY,) + x.shape[1:], x.dtype), x[:-DELAY]], 0)
