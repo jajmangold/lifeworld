@@ -22,7 +22,7 @@ ap.add_argument("--tex", required=True); ap.add_argument("--uv", required=True)
 ap.add_argument("--map-dir", default="/work/tools/kimodo/text_encoders/../../kimodo_dummy")
 ap.add_argument("--mappings", default="/work/tools/mp2flame/mappings")
 ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--out", required=True)
-ap.add_argument("--viseme-delay-ms", type=float, default=250.0)  # LAM visemes lead audio ~250ms (eye-tuned)
+ap.add_argument("--viseme-delay-ms", type=float, default=150.0)  # LAM visemes lead audio ~250ms (eye-tuned)
 ap.add_argument("--pre-roll", type=float, default=0.6)       # idle beat (mouth closed) before speech
 a = ap.parse_args()
 # ---- Kimodo body at NATIVE frame rate (do NOT resample rotations: linear-interpolating
