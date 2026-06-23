@@ -23,6 +23,7 @@ ap.add_argument("--map-dir", default="/work/tools/kimodo/text_encoders/../../kim
 ap.add_argument("--mappings", default="/work/tools/mp2flame/mappings")
 ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--out", required=True)
 ap.add_argument("--face-lead-ms", type=float, default=0.0)   # LAM jaw trails audio ~66ms; advance face
+ap.add_argument("--pre-roll", type=float, default=0.6)       # idle beat (mouth closed) before speech
 a = ap.parse_args()
 # ---- Kimodo body at NATIVE frame rate (do NOT resample rotations: linear-interpolating
 # axis-angle is invalid and flips the body sideways mid-clip). Render at Kimodo's fps. ----
@@ -66,6 +67,15 @@ elif shift < 0:                                                 # advance: hold 
     k = -shift; adv = lambda x: np.concatenate([x[k:], np.repeat(x[-1:], k, 0)], 0)
     expr, jaw, leye, reye = adv(expr), adv(jaw), adv(leye), adv(reye)
 
+# pre-roll: hold an idle (mouth-closed) beat before speech so the mouth never moves before words
+PRE = int(round(a.pre_roll * FPS))
+if PRE > 0:
+    rep = lambda x: np.concatenate([np.repeat(x[:1], PRE, 0), x], 0)      # hold first body pose
+    zer = lambda x: np.concatenate([np.zeros((PRE,) + x.shape[1:], x.dtype), x], 0)  # neutral face
+    body, go, transl = rep(body), rep(go), rep(transl)
+    expr, jaw, leye, reye = zer(expr), zer(jaw), zer(leye), zer(reye)
+    F = len(body)
+
 betas = np.zeros((1, 10), np.float32)
 model = smplx.create("/work/models", model_type="smplx", gender=a.gender, num_betas=10,
                      use_pca=False, flat_hand_mean=True, num_expression_coeffs=100, batch_size=F)
@@ -103,6 +113,7 @@ subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-
                 # audio track ~50ms longer than the frames -> otherwise the last words play after the
                 # picture ends). No -shortest, so the padded video is kept.
                 "-vf", "tpad=stop_mode=clone:stop_duration=0.4",
+                "-af", f"adelay={int(round(a.pre_roll * 1000))}:all=1",   # silence over the idle pre-roll
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
                 "-c:a", "aac", "-movflags", "+faststart", a.out], check=True)
 print("COMBO_OK", a.out, "F", F)
