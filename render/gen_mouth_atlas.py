@@ -38,11 +38,9 @@ def teeth(top_enamel, bot_enamel, n_teeth=9):
 
 
 def tongue():
-    img = vgrad([78, 36, 40], [120, 60, 64])              # dim wet interior (not bright pink)
-    x = np.arange(W)
-    sulcus = np.exp(-((x - W / 2) / 6.0) ** 2)            # median groove down the middle
-    img *= (1 - 0.35 * sulcus)[None, :, None]
-    img += rng.normal(0, 5, img.shape)                    # papillae stipple
+    # keep the tongue dark so it reads as deep interior, not a colored band high in the opening
+    img = vgrad([40, 20, 22], [20, 10, 11])
+    img += rng.normal(0, 3, img.shape)
     return img
 
 
