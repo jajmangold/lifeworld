@@ -22,7 +22,7 @@ ap.add_argument("--tex", required=True); ap.add_argument("--uv", required=True)
 ap.add_argument("--map-dir", default="/work/tools/kimodo/text_encoders/../../kimodo_dummy")
 ap.add_argument("--mappings", default="/work/tools/mp2flame/mappings")
 ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--out", required=True)
-ap.add_argument("--face-lead-ms", type=float, default=0.0)   # LAM jaw trails audio ~66ms; advance face
+ap.add_argument("--viseme-delay-ms", type=float, default=250.0)  # LAM visemes lead audio ~250ms (eye-tuned)
 ap.add_argument("--pre-roll", type=float, default=0.6)       # idle beat (mouth closed) before speech
 a = ap.parse_args()
 # ---- Kimodo body at NATIVE frame rate (do NOT resample rotations: linear-interpolating
@@ -51,21 +51,14 @@ M = (Ry @ Rfix).astype(np.float32)
 go = mat2aa(M[None] @ aa2mat(go0)).astype(np.float32)
 transl = (tr0 @ M.T).astype(np.float32)
 
-# ---- LAM/FLAME face ----
+# ---- LAM/FLAME face, delayed vs audio ----
 expr, jaw, leye, reye = FlameDriver(a.mappings).drive(json.load(open(a.arkit)), F, FPS, gain=0.4)
-# LAM's frame 0 is already mouth-open, but TTS has leading silence -> mouth moves before sound.
-# Align the face ONSET to the audio onset: neutral (closed) until speech starts, then LAM motion.
-import wave as _wave
-_w = _wave.open(a.audio); _sr = _w.getframerate()
-_s = np.abs(np.frombuffer(_w.readframes(_w.getnframes()), np.int16).astype(np.float32))
-onset_f = int(round(np.argmax(_s > _s.max() * 0.05) / _sr * FPS))
-shift = onset_f - int(round(a.face_lead_ms / 1000.0 * FPS))     # delay to onset (minus optional lead)
-if shift > 0:                                                   # delay: neutral-fill the silent head
-    pad = lambda x: np.concatenate([np.zeros((shift,) + x.shape[1:], x.dtype), x[:-shift]], 0)
+# LAM's visemes lead the audio (its loudness ~aligns but the mouth shapes run ahead ~250ms,
+# tuned by eye). Delay the face and neutral-fill the head -> mouth closed until speech, lands on words.
+DELAY = int(round(a.viseme_delay_ms / 1000.0 * FPS))
+if DELAY > 0:
+    pad = lambda x: np.concatenate([np.zeros((DELAY,) + x.shape[1:], x.dtype), x[:-DELAY]], 0)
     expr, jaw, leye, reye = pad(expr), pad(jaw), pad(leye), pad(reye)
-elif shift < 0:                                                 # advance: hold last frame at the tail
-    k = -shift; adv = lambda x: np.concatenate([x[k:], np.repeat(x[-1:], k, 0)], 0)
-    expr, jaw, leye, reye = adv(expr), adv(jaw), adv(leye), adv(reye)
 
 # pre-roll: hold an idle (mouth-closed) beat before speech so the mouth never moves before words
 PRE = int(round(a.pre_roll * FPS))
