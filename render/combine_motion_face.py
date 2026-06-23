@@ -98,9 +98,11 @@ for fi in range(F):
     Image.fromarray(r.render(s)[0]).save(f"/tmp/combo_f/f_{fi:04d}.png")
 r.delete()
 subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", "/tmp/combo_f/f_%04d.png",
-                "-i", a.audio, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
-                "-af", "aresample=async=1:first_pts=0", "-c:a", "aac",
-                # zero-based timestamps + faststart: avoids the AAC priming edit-list that makes
-                # simple players prepend ~42-85ms of silence (video appears ahead of audio)
-                "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", "-shortest", a.out], check=True)
+                "-i", a.audio,
+                # hold the last frame 0.4s so the video OUTLASTS the audio (AAC end-padding makes the
+                # audio track ~50ms longer than the frames -> otherwise the last words play after the
+                # picture ends). No -shortest, so the padded video is kept.
+                "-vf", "tpad=stop_mode=clone:stop_duration=0.4",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
+                "-c:a", "aac", "-movflags", "+faststart", a.out], check=True)
 print("COMBO_OK", a.out, "F", F)
