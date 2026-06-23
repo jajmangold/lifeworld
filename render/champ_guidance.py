@@ -39,8 +39,10 @@ transl = (trans @ M.T).astype(np.float32)
 model = smplx.create("/work/models", model_type="smplx", gender="male", num_betas=10,
                      use_pca=False, flat_hand_mean=True, batch_size=F)
 with torch.no_grad():
-    v = model(global_orient=torch.from_numpy(go), body_pose=torch.from_numpy(body),
-              transl=torch.from_numpy(transl)).vertices.numpy().astype(np.float32)
+    _out = model(global_orient=torch.from_numpy(go), body_pose=torch.from_numpy(body),
+                 transl=torch.from_numpy(transl))
+    v = _out.vertices.numpy().astype(np.float32)
+    J = _out.joints.numpy().astype(np.float32)          # (F, n_joints, 3) for dwpose
 faces = model.faces.astype(np.int64)
 # fixed camera: frame the whole motion's body, portrait, small margin
 allv = v.reshape(-1, 3); mn = allv.min(0); mx = allv.max(0); ctr = (mn + mx) / 2
@@ -49,6 +51,32 @@ dist = bodyH / (2 * np.tan(0.5 * YFOV)) * 1.12
 cam_pose = np.eye(4); cam_pose[:3, 3] = [ctr[0], ctr[1], ctr[2] + dist]
 Rcam = cam_pose[:3, :3]
 os.makedirs(f"{OUT}/depth", exist_ok=True); os.makedirs(f"{OUT}/normal", exist_ok=True)
+os.makedirs(f"{OUT}/dwpose", exist_ok=True)
+# ---- dwpose (OpenPose-18) from SMPL-X joints, projected with the SAME camera ----
+from PIL import ImageDraw
+FY = 1.0 / np.tan(YFOV / 2); ASP = W / H
+def project(p):                                          # world (N,3) -> pixel (N,2)
+    pc = p - cam_pose[:3, 3]; z = -pc[:, 2]
+    u = (pc[:, 0] * FY / ASP / z + 1) / 2 * W
+    vv = (1 - pc[:, 1] * FY / z) / 2 * H
+    return np.stack([u, vv], 1)
+# SMPL-X joint idx -> OpenPose-18 (nose,neck,Rsh,Rel,Rwr,Lsh,Lel,Lwr,Rhip,Rkn,Rank,Lhip,Lkn,Lank,Reye,Leye,Rear,Lear)
+SX = [None, 12, 17, 19, 21, 16, 18, 20, 2, 5, 8, 1, 4, 7, 24, 23, 24, 23]
+LIMBS = [(1,2),(1,5),(2,3),(3,4),(5,6),(6,7),(1,8),(8,9),(9,10),(1,11),(11,12),(12,13),(1,0),(0,14),(14,16),(0,15),(15,17)]
+COLORS = [(255,0,0),(255,85,0),(255,170,0),(255,255,0),(170,255,0),(85,255,0),(0,255,0),(0,255,85),
+          (0,255,170),(0,255,255),(0,170,255),(0,85,255),(0,0,255),(85,0,255),(170,0,255),(255,0,255),(255,0,170)]
+for fi in range(F):
+    pj = project(J[fi])
+    kp = np.zeros((18, 2), np.float32)
+    kp[0] = (pj[23] + pj[24]) / 2                        # nose ~ between eyes
+    for o in range(1, 18):
+        kp[o] = pj[SX[o]]
+    im = Image.new("RGB", (W, H), (0, 0, 0)); dr = ImageDraw.Draw(im)
+    for li, (a_, b_) in enumerate(LIMBS):
+        dr.line([tuple(kp[a_]), tuple(kp[b_])], fill=COLORS[li], width=4)
+    for o in range(18):
+        x, y = kp[o]; dr.ellipse([x - 3, y - 3, x + 3, y + 3], fill=COLORS[o % len(COLORS)])
+    im.save(f"{OUT}/dwpose/{fi:04d}.png")
 r = pyrender.OffscreenRenderer(W, H)
 cam = pyrender.PerspectiveCamera(yfov=YFOV, aspectRatio=W / H)
 vn_all = None
