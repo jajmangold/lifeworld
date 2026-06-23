@@ -99,5 +99,8 @@ for fi in range(F):
 r.delete()
 subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", "/tmp/combo_f/f_%04d.png",
                 "-i", a.audio, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18",
-                "-c:a", "aac", "-shortest", a.out], check=True)
+                "-af", "aresample=async=1:first_pts=0", "-c:a", "aac",
+                # zero-based timestamps + faststart: avoids the AAC priming edit-list that makes
+                # simple players prepend ~42-85ms of silence (video appears ahead of audio)
+                "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", "-shortest", a.out], check=True)
 print("COMBO_OK", a.out, "F", F)
