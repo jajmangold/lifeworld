@@ -8,13 +8,14 @@ from mediapipe.tasks import python as mpp
 from mediapipe.tasks.python import vision
 
 IN, OUT = sys.argv[1], sys.argv[2]
+import numpy as np
 opts = vision.FaceLandmarkerOptions(
     base_options=mpp.BaseOptions(model_asset_path="/face_landmarker.task"),
-    output_face_blendshapes=True, num_faces=1,
+    output_face_blendshapes=True, output_facial_transformation_matrixes=True, num_faces=1,
     running_mode=vision.RunningMode.VIDEO)
 lm = vision.FaceLandmarker.create_from_options(opts)
 cap = cv2.VideoCapture(IN); fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-names, weights = None, []
+names, weights, head_R = None, [], []
 t = 0
 while True:
     ok, fr = cap.read()
@@ -27,6 +28,13 @@ while True:
         weights.append([c.score for c in bs])
     else:
         weights.append([0.0] * (len(names) if names else 52))
+    # head pose: 3x3 rotation from the facial transformation matrix (identity if no face)
+    if res.facial_transformation_matrixes:
+        R = np.asarray(res.facial_transformation_matrixes[0])[:3, :3]
+        head_R.append(R.flatten().tolist())
+    else:
+        head_R.append([1, 0, 0, 0, 1, 0, 0, 0, 1])
 cap.release()
-json.dump({"arkit_names": names, "weights": weights, "fps": fps, "num_frames": len(weights)}, open(OUT, "w"))
-print("MP_EXTRACT_OK", OUT, "frames", len(weights), "names", len(names or []))
+json.dump({"arkit_names": names, "weights": weights, "fps": fps, "num_frames": len(weights),
+           "head_R": head_R}, open(OUT, "w"))
+print("MP_EXTRACT_OK", OUT, "frames", len(weights), "names", len(names or []), "head_R", len(head_R))

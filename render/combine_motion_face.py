@@ -27,6 +27,9 @@ ap.add_argument("--exp-gain", type=float, default=0.4)            # FLAME expres
 ap.add_argument("--jaw-gain", type=float, default=1.0)            # jaw-open amplification (mouth)
 ap.add_argument("--bg", default="0.07,0.07,0.08")                 # scene bg rgb (e.g. green screen)
 ap.add_argument("--lock-head", action="store_true")              # keep head frontal/upright (for flat face composite)
+ap.add_argument("--track-head", action="store_true")            # drive head joint with FLOAT face yaw/pitch/roll (head_R in arkit json)
+ap.add_argument("--head-signs", default="1,1,1")                # sx,sy,sz to match MP->SMPL-X convention
+ap.add_argument("--head-gain", type=float, default=1.0)         # scale the tracked head rotation
 a = ap.parse_args()
 
 # ---- Kimodo body at NATIVE frame rate (do NOT resample rotations: linear-interpolating
@@ -61,7 +64,8 @@ go = mat2aa(M[None] @ aa2mat(go0)).astype(np.float32)
 transl = (tr0 @ M.T).astype(np.float32)
 
 # ---- LAM/FLAME face, delayed vs audio (LAM visemes lead; eye-tuned). Neutral-fill the head. ----
-expr, jaw, leye, reye = FlameDriver(a.mappings).drive(json.load(open(a.arkit)), F, FPS, gain=a.exp_gain)
+AKJ = json.load(open(a.arkit))
+expr, jaw, leye, reye = FlameDriver(a.mappings).drive(AKJ, F, FPS, gain=a.exp_gain)
 jaw = jaw * a.jaw_gain                                            # open the mouth wider
 DELAY = int(round(a.viseme_delay_ms / 1000.0 * FPS))
 if DELAY > 0:
@@ -79,11 +83,26 @@ if PRE > 0:
 
 # ---- lock the head frontal/upright so the flat FLOAT face composite never sits on a turned head:
 # zero neck+head joints, damp spine lean, hold global_orient constant. Arms/gestures untouched. ----
-if a.lock_head:
+if a.lock_head or a.track_head:
     bp = body.reshape(F, -1, 3)                                   # SMPL-X body_pose (21 joints)
     bp[:, (2, 5, 8)] *= 0.25                                      # spine1/2/3 -> damp torso lean/pitch
     bp[:, 11] = 0.0                                               # neck
     bp[:, 14] = 0.0                                               # head
+    if a.track_head and "head_R" in AKJ:
+        # drive the head joint with the FLOAT face's measured yaw/pitch/roll -> 3D head matches the 2D face
+        sx, sy, sz = [float(x) for x in a.head_signs.split(",")]; gn = a.head_gain
+        HR = np.asarray(AKJ["head_R"], np.float32).reshape(-1, 3, 3)
+        src = float(AKJ.get("fps", 25.0))
+        idx = np.clip(np.round(np.arange(F) / FPS * src).astype(int), 0, len(HR) - 1)
+        Rs = HR[idx]                                              # (F,3,3) MediaPipe head rotation
+        pitch = sx * gn * np.arctan2(-Rs[:, 2, 1], Rs[:, 2, 2])
+        yaw   = sy * gn * np.arctan2(Rs[:, 2, 0], np.hypot(Rs[:, 2, 1], Rs[:, 2, 2]))
+        roll  = sz * gn * np.arctan2(-Rs[:, 1, 0], Rs[:, 0, 0])
+        def _Rx(t): o=np.zeros((F,3,3),np.float32); c,s=np.cos(t),np.sin(t); o[:,0,0]=1; o[:,1,1]=c; o[:,1,2]=-s; o[:,2,1]=s; o[:,2,2]=c; return o
+        def _Ry(t): o=np.zeros((F,3,3),np.float32); c,s=np.cos(t),np.sin(t); o[:,1,1]=1; o[:,0,0]=c; o[:,0,2]=s; o[:,2,0]=-s; o[:,2,2]=c; return o
+        def _Rz(t): o=np.zeros((F,3,3),np.float32); c,s=np.cos(t),np.sin(t); o[:,2,2]=1; o[:,0,0]=c; o[:,0,1]=-s; o[:,1,0]=s; o[:,1,1]=c; return o
+        Rh = _Ry(yaw) @ _Rx(pitch) @ _Rz(roll)                   # SMPL-X head rotation
+        bp[:, 14] = mat2aa(Rh)                                    # apply to head joint
     body = bp.reshape(F, -1)
     go[:] = go[0]                                                 # hold root facing (no turn/lean drift)
 
