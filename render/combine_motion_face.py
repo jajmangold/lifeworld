@@ -26,6 +26,7 @@ ap.add_argument("--pre-roll", type=float, default=0.6)            # idle beat (m
 ap.add_argument("--exp-gain", type=float, default=0.4)            # FLAME expression scale
 ap.add_argument("--jaw-gain", type=float, default=1.0)            # jaw-open amplification (mouth)
 ap.add_argument("--bg", default="0.07,0.07,0.08")                 # scene bg rgb (e.g. green screen)
+ap.add_argument("--lock-head", action="store_true")              # keep head frontal/upright (for flat face composite)
 a = ap.parse_args()
 
 # ---- Kimodo body at NATIVE frame rate (do NOT resample rotations: linear-interpolating
@@ -75,6 +76,16 @@ if PRE > 0:
     body, go, transl = rep(body), rep(go), rep(transl)
     expr, jaw, leye, reye = zer(expr), zer(jaw), zer(leye), zer(reye)
     F = len(body)
+
+# ---- lock the head frontal/upright so the flat FLOAT face composite never sits on a turned head:
+# zero neck+head joints, damp spine lean, hold global_orient constant. Arms/gestures untouched. ----
+if a.lock_head:
+    bp = body.reshape(F, -1, 3)                                   # SMPL-X body_pose (21 joints)
+    bp[:, (2, 5, 8)] *= 0.25                                      # spine1/2/3 -> damp torso lean/pitch
+    bp[:, 11] = 0.0                                               # neck
+    bp[:, 14] = 0.0                                               # head
+    body = bp.reshape(F, -1)
+    go[:] = go[0]                                                 # hold root facing (no turn/lean drift)
 
 betas = np.zeros((1, 10), np.float32)
 model = smplx.create("/work/models", model_type="smplx", gender=a.gender, num_betas=10,
