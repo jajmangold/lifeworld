@@ -15,11 +15,14 @@ ap.add_argument("--audio", required=True); ap.add_argument("--frames", type=int,
 ap.add_argument("--fps", type=int, default=25); ap.add_argument("--yaw", type=float, default=28.0)
 ap.add_argument("--gender", default="male"); ap.add_argument("--mappings", default="/work/tools/mp2flame/mappings")
 ap.add_argument("--tex", default=None); ap.add_argument("--uv", default=None)   # textured head (DLC target)
+ap.add_argument("--exp-gain", type=float, default=0.4)   # FLAME expression scale (lip shapes)
+ap.add_argument("--jaw-gain", type=float, default=1.0)   # jaw-open amplification (mouth opening)
 a = ap.parse_args()
 F = a.frames
 _uv = np.load(a.uv)["uv_coordinates"] if a.uv else None
 _tex = Image.open(a.tex).convert("RGB") if a.tex else None
-expr, jaw, leye, reye = FlameDriver(a.mappings).drive(_json.load(open(a.arkit)), F, a.fps, gain=0.4)
+expr, jaw, leye, reye = FlameDriver(a.mappings).drive(_json.load(open(a.arkit)), F, a.fps, gain=a.exp_gain)
+jaw = jaw * a.jaw_gain                                    # open the mouth wider
 # head turn: yaw sweep (one left-right cycle) about vertical -> real 3D rotation while talking
 th = np.radians(a.yaw) * np.sin(np.linspace(0, 2 * np.pi, F))
 go = np.zeros((F, 3), np.float32); go[:, 1] = th               # global_orient yaw
