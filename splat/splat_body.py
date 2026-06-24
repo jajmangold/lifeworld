@@ -5,6 +5,7 @@ rendered with gsplat. Splats = per-vertex, ride the deforming mesh.
 import os, sys, argparse, json, numpy as np, torch, smplx
 from PIL import Image
 from gsplat import rasterization
+sys.path.insert(0,"/lw/splat"); from splat_build import build_face_splats
 sys.path.insert(0, "/lw/render"); from face_flame import FlameDriver
 dev = "cuda"
 ap = argparse.ArgumentParser()
@@ -62,6 +63,7 @@ yaws=np.linspace(-45,45,F) if a.multiview else np.zeros(F)
 for fi in range(F):
     ang=np.radians(yaws[fi]); eye=[ctr[0]+dist*np.sin(ang),ctr[1],ctr[2]+dist*np.cos(ang)]
     vm=torch.tensor(look_at(eye,[ctr[0],ctr[1],ctr[2]]),device=dev)[None]
-    out,_,_=rasterization(torch.tensor(V[fi],device=dev),quats,scales,opac,vcol_t,vm,K,res,res)
+    mn,qz,sc,cl=build_face_splats(V[fi],faces,uv,tex)
+    out,_,_=rasterization(torch.tensor(mn,device=dev),torch.tensor(qz,device=dev),torch.tensor(sc,device=dev),torch.ones(len(mn),device=dev),torch.tensor(cl,device=dev),vm,K,res,res)
     Image.fromarray((out[0].clamp(0,1)*255).byte().cpu().numpy()).save(f"{FRAMEDIR}/f_{fi:04d}.png")
 print("SPLAT_BODY_OK", FRAMEDIR, "F", F)

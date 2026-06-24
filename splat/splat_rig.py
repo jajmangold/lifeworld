@@ -7,13 +7,14 @@ import os, sys, argparse, subprocess, json, numpy as np, torch
 import smplx
 from PIL import Image
 from gsplat import rasterization
+sys.path.insert(0,"/lw/splat"); from splat_build import build_face_splats
 sys.path.insert(0, "/lw/render"); from face_flame import FlameDriver
 dev = "cuda"
 ap = argparse.ArgumentParser()
 ap.add_argument("--out", required=True); ap.add_argument("--frames", type=int, default=16)
 ap.add_argument("--static", action="store_true"); ap.add_argument("--multiview", action="store_true")
 ap.add_argument("--arkit", default="/lw/output/greenman_mp6.json")
-ap.add_argument("--scale", type=float, default=0.008); ap.add_argument("--res", type=int, default=320); ap.add_argument("--yaw", type=float, default=0.0)
+ap.add_argument("--scale", type=float, default=0.008); ap.add_argument("--res", type=int, default=320); ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--mode", default="face")
 a = ap.parse_args()
 F = 1 if a.static else a.frames
 
@@ -64,8 +65,15 @@ yaws = np.linspace(-40,40,F) if a.multiview else np.zeros(F)
 for fi in range(F):
     th=np.radians(yaws[fi]); eye=[dist*np.sin(th), headc, dist*np.cos(th)]
     vm=torch.tensor(look_at(eye,[0,headc,0]),device=dev)[None]
-    means=torch.tensor(V[fi if not a.static else 0],device=dev)
-    out,_,_=rasterization(means,quats,scales,opac,vcol_t,vm,K,res,res)
+    vf=V[fi if not a.static else 0]
+    if a.mode=="face":
+        mn,qz,sc,cl=build_face_splats(vf,faces,uv,tex)
+        means=torch.tensor(mn,device=dev); q=torch.tensor(qz,device=dev); s=torch.tensor(sc,device=dev)
+        op=torch.ones(len(mn),device=dev); col=torch.tensor(cl,device=dev)
+        out,_,_=rasterization(means,q,s,op,col,vm,K,res,res)
+    else:
+        means=torch.tensor(vf,device=dev)
+        out,_,_=rasterization(means,quats,scales,opac,vcol_t,vm,K,res,res)
     Image.fromarray((out[0].clamp(0,1)*255).byte().cpu().numpy()).save(f"{FRAMEDIR}/f_{fi:04d}.png")
 if a.static:
     Image.open(f"{FRAMEDIR}/f_0000.png").save(a.out.replace(".mp4",".png")); print("SPLAT_STATIC_OK", a.out.replace(".mp4",".png"))
