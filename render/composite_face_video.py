@@ -48,7 +48,9 @@ while True:
     j = min(int(round((fi / a.body_fps) * a.face_fps)), len(faces) - 1)   # time-align
     fr = cv2.resize(faces[j], (2*bs, 2*bs), interpolation=cv2.INTER_CUBIC)
     yy, xx = np.mgrid[0:2*bs, 0:2*bs].astype(np.float32)
-    m = np.clip(np.minimum.reduce([xx, yy, 2*bs-1-xx, 2*bs-1-yy]) / (bs * 0.4), 0, 1)[..., None]
+    # elliptical feathered mask -> paste only the face oval, drop the source's bg corners
+    d = np.sqrt(((xx - bs) / (bs * 0.72)) ** 2 + ((yy - bs) / (bs * 0.82)) ** 2)
+    m = np.clip((1.0 - d) / 0.22, 0, 1)[..., None]
     out = body.copy(); y0, x0 = my - bs, mx - bs
     sy0, sx0 = max(0, -y0), max(0, -x0); dy0, dx0 = max(0, y0), max(0, x0)
     dy1, dx1 = min(H, y0 + 2*bs), min(W, x0 + 2*bs); sy1, sx1 = sy0 + (dy1 - dy0), sx0 + (dx1 - dx0)
