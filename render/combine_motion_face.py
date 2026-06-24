@@ -25,6 +25,7 @@ ap.add_argument("--viseme-delay-ms", type=float, default=150.0)   # LAM visemes 
 ap.add_argument("--pre-roll", type=float, default=0.6)            # idle beat (mouth closed) before speech
 ap.add_argument("--exp-gain", type=float, default=0.4)            # FLAME expression scale
 ap.add_argument("--jaw-gain", type=float, default=1.0)            # jaw-open amplification (mouth)
+ap.add_argument("--bg", default="0.07,0.07,0.08")                 # scene bg rgb (e.g. green screen)
 a = ap.parse_args()
 
 # ---- Kimodo body at NATIVE frame rate (do NOT resample rotations: linear-interpolating
@@ -97,7 +98,7 @@ for fi in range(F):
     cy = head - shot_h * 0.42
     ctr = np.array([cen[fi, 0], cy, cen[fi, 2]], np.float32)
     cam = _aim([ctr[0], ctr[1], ctr[2] + dist], ctr)
-    s = pyrender.Scene(bg_color=[0.07, 0.07, 0.08, 1], ambient_light=[0.5, 0.5, 0.5])
+    s = pyrender.Scene(bg_color=[float(x) for x in a.bg.split(",")] + [1], ambient_light=[0.5, 0.5, 0.5])
     s.add(build_mesh(v[fi], faces, uv, tex))
     if jaw[fi, 0] > 0.05:
         s.add(pyrender.Mesh.from_trimesh(trimesh.Trimesh(mv[fi], mf, vertex_colors=mcol, process=False), smooth=False))
