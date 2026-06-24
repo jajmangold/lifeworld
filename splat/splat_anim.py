@@ -18,7 +18,7 @@ ap.add_argument("--arkit",default="/o/greenman_mp6.json"); ap.add_argument("--au
 ap.add_argument("--out",required=True); ap.add_argument("--frames",type=int,default=40); ap.add_argument("--res",type=int,default=420)
 ap.add_argument("--sam3d",default="/o/sam3d/greenman_skel.json"); ap.add_argument("--betas",action="store_true")
 ap.add_argument("--hcrop",type=float,default=0.66); ap.add_argument("--hscale",type=float,default=0.9)
-ap.add_argument("--hy",type=float,default=0.05); ap.add_argument("--hz",type=float,default=0.04)
+ap.add_argument("--hy",type=float,default=0.05); ap.add_argument("--hz",type=float,default=0.04); ap.add_argument("--closeup",action="store_true"); ap.add_argument("--jawgain",type=float,default=2.4)
 a=ap.parse_args()
 def look_at(eye,tgt,up=(0,1,0)):
     eye=np.array(eye,np.float32);tgt=np.array(tgt,np.float32);up=np.array(up,np.float32)
@@ -46,7 +46,7 @@ kb=d["pose_body"].astype(np.float32); F=min(a.frames,len(kb)); kb=kb[:F]
 betas=np.zeros((1,10),np.float32)
 if a.betas: betas[0]=np.array(json.load(open(a.sam3d))["shape_params"][:10],np.float32)
 # FLAME talk (resampled to F)
-e,j,l,r=FlameDriver("/work/tools/mp2flame/mappings").drive(json.load(open(a.arkit)),F,FPS,gain=0.6); j=j*2.4
+e,j,l,r=FlameDriver("/work/tools/mp2flame/mappings").drive(json.load(open(a.arkit)),F,FPS,gain=0.6); j=j*a.jawgain
 
 model=smplx.create("/work/models",model_type="smplx",gender="male",num_betas=10,use_pca=False,flat_hand_mean=True,num_expression_coeffs=100,batch_size=1)
 faces=model.faces.astype(np.int64)
@@ -97,12 +97,14 @@ for fi in range(F):
     R=np.einsum('nij,nkj->nik',B1[nn],B0[nn])             # per-gaussian rotation B1 B0^T
     Hq=quat_mul(mat2quat(R),hq); Hq/=np.linalg.norm(Hq,axis=1,keepdims=True)
     bcen,bq,bs,bcol=build_face_splats(V,faces,uv,tex)
-    keepb=bcen[:,1]<neck_y; bcen,bq,bs,bcol=bcen[keepb],bq[keepb],bs[keepb],bcol[keepb]
+    keepb=bcen[:,1]<headj[1]+0.04; bcen,bq,bs,bcol=bcen[keepb],bq[keepb],bs[keepb],bcol[keepb]
     means=np.concatenate([Hm,bcen]);quats=np.concatenate([Hq,bq]);scales=np.concatenate([Hs,bs])
     opac=np.concatenate([ho,np.ones(len(bcen))]);cols=np.concatenate([hc,bcol])
     T=[torch.tensor(x.astype(np.float32),device=dev) for x in (means,quats,scales,opac,cols)]
     if fi==0:
         mn,mx=means.min(0),means.max(0); ctr=((mn+mx)/2).copy(); bh=mx[1]-mn[1]; dist=bh/(2*np.tan(0.5*YFOV))*1.15
+        if a.closeup:
+            ctr=np.array([0.0, headj[1]-0.14, mx[2]],np.float32); dist=0.62/(2*np.tan(0.5*YFOV))*1.1
     vm=torch.tensor(look_at([ctr[0],ctr[1],ctr[2]+dist],[ctr[0],ctr[1],ctr[2]]),device=dev)[None]
     out,_,_=rasterization(T[0],T[1],T[2],T[3],T[4],vm,K,res,res)
     Image.fromarray((out[0].clamp(0,1)*255).byte().cpu().numpy()).save(f"{FRAMEDIR}/f_{fi:04d}.png")
