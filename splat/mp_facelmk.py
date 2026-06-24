@@ -7,5 +7,5 @@ lm = vision.FaceLandmarker.create_from_options(vision.FaceLandmarkerOptions(
 img = cv2.imread(IN); H, W = img.shape[:2]
 r = lm.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(img, cv2.COLOR_BGR2RGB)))
 L = r.face_landmarks[0]
-pts = {k: [L[i].x*W, L[i].y*H] for k, i in [("eyeL",33), ("eyeR",263), ("nose",1)]}
+pts = {k: [L[i].x*W, L[i].y*H] for k, i in [("eyeL",33), ("eyeR",263), ("nose",1), ("mouth",13), ("chin",152)]}
 json.dump({"pts": pts, "w": W, "h": H}, open(OUT, "w")); print("FACELMK_OK", pts)
