@@ -1,3 +1,5 @@
 .extcache/
 _splatframes/
 *.npy
+ml-sharp/
+sharp/
