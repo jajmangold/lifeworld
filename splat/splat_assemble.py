@@ -31,7 +31,7 @@ hcen=hm.mean(0); hheight=hm[:,1].max()-hm[:,1].min()
 
 # --- SMPL-X body surface splats (neutral, faces +z via yaw 180) ---
 model=smplx.create("/work/models",model_type="smplx",gender="male",num_betas=10,use_pca=False,flat_hand_mean=True,num_expression_coeffs=100,batch_size=1)
-go=np.zeros((1,3),np.float32); go[:,1]=np.radians(180.0)
+go=np.zeros((1,3),np.float32)  # go=0 faces +z (camera)
 with torch.no_grad():
     o=model(global_orient=torch.from_numpy(go),betas=torch.zeros(1,10))
 V=o.vertices.numpy()[0].astype(np.float32); J=o.joints.numpy()[0].astype(np.float32)
