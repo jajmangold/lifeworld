@@ -1,0 +1,3 @@
+FROM kdtalker:1.1
+ENV TORCH_CUDA_ARCH_LIST=7.0 PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN pip install --no-cache-dir gsplat smplx plyfile trimesh "numpy<2" 2>&1 | tail -3
