@@ -6,7 +6,7 @@ import os; os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
 import sys, argparse, subprocess, numpy as np, torch, smplx, pyrender, trimesh
 from PIL import Image
 sys.path.insert(0, "/lw/render"); from face_flame import FlameDriver
-from render_smplx import _aim
+from render_smplx import _aim, build_mesh
 import json as _json
 
 ap = argparse.ArgumentParser()
@@ -14,8 +14,11 @@ ap.add_argument("--arkit", required=True); ap.add_argument("--out", required=Tru
 ap.add_argument("--audio", required=True); ap.add_argument("--frames", type=int, default=125)
 ap.add_argument("--fps", type=int, default=25); ap.add_argument("--yaw", type=float, default=28.0)
 ap.add_argument("--gender", default="male"); ap.add_argument("--mappings", default="/work/tools/mp2flame/mappings")
+ap.add_argument("--tex", default=None); ap.add_argument("--uv", default=None)   # textured head (DLC target)
 a = ap.parse_args()
 F = a.frames
+_uv = np.load(a.uv)["uv_coordinates"] if a.uv else None
+_tex = Image.open(a.tex).convert("RGB") if a.tex else None
 expr, jaw, leye, reye = FlameDriver(a.mappings).drive(_json.load(open(a.arkit)), F, a.fps, gain=0.4)
 # head turn: yaw sweep (one left-right cycle) about vertical -> real 3D rotation while talking
 th = np.radians(a.yaw) * np.sin(np.linspace(0, 2 * np.pi, F))
@@ -35,7 +38,10 @@ cam = _aim([0, headc, dist], ctr)
 r = pyrender.OffscreenRenderer(420, 520); os.makedirs("/tmp/headab", exist_ok=True)
 for fi in range(F):
     s = pyrender.Scene(bg_color=[0.1, 0.1, 0.12, 1], ambient_light=[0.5, 0.5, 0.5])
-    s.add(pyrender.Mesh.from_trimesh(trimesh.Trimesh(v[fi], faces, process=False), smooth=True))
+    if _tex is not None:
+        s.add(build_mesh(v[fi], faces, _uv, _tex))
+    else:
+        s.add(pyrender.Mesh.from_trimesh(trimesh.Trimesh(v[fi], faces, process=False), smooth=True))
     s.add(pyrender.PerspectiveCamera(yfov=YFOV, aspectRatio=420 / 520), pose=cam)
     s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=3.2), pose=_aim([1, headc + 2, dist + 1], ctr))
     s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=1.3), pose=_aim([-2, headc + 1, dist], ctr))
