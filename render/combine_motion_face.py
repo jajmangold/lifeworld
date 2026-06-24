@@ -102,7 +102,9 @@ if a.lock_head or a.track_head:
         def _Ry(t): o=np.zeros((F,3,3),np.float32); c,s=np.cos(t),np.sin(t); o[:,1,1]=1; o[:,0,0]=c; o[:,0,2]=s; o[:,2,0]=-s; o[:,2,2]=c; return o
         def _Rz(t): o=np.zeros((F,3,3),np.float32); c,s=np.cos(t),np.sin(t); o[:,2,2]=1; o[:,0,0]=c; o[:,0,1]=-s; o[:,1,0]=s; o[:,1,1]=c; return o
         Rh = _Ry(yaw) @ _Rx(pitch) @ _Rz(roll)                   # SMPL-X head rotation
-        bp[:, 14] = mat2aa(Rh)                                    # apply to head joint
+        aa = mat2aa(Rh)
+        bp[:, 11] = aa * 0.6                                      # neck: pivot whole head (top moves)
+        bp[:, 14] = aa * 0.4                                      # head: rest on skull joint
     body = bp.reshape(F, -1)
     go[:] = go[0]                                                 # hold root facing (no turn/lean drift)
 
