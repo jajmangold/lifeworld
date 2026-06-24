@@ -10,6 +10,9 @@ sys.path.insert(0,"/lw/splat"); from splat_build import build_face_splats
 dev="cuda"
 ap=argparse.ArgumentParser(); ap.add_argument("--ply",required=True); ap.add_argument("--out",required=True)
 ap.add_argument("--res",type=int,default=512); ap.add_argument("--orbit",action="store_true")
+ap.add_argument("--sam3d",default="/o/sam3d/greenman_skel.json")   # his betas
+ap.add_argument("--betas",action="store_true")                     # use SAM3D betas
+ap.add_argument("--hcrop",type=float,default=0.72); ap.add_argument("--hscale",type=float,default=1.0); ap.add_argument("--hy",type=float,default=0.0); ap.add_argument("--hz",type=float,default=0.0)
 a=ap.parse_args()
 def look_at(eye,tgt,up=(0,1,0)):
     eye=np.array(eye,np.float32);tgt=np.array(tgt,np.float32);up=np.array(up,np.float32)
@@ -23,29 +26,38 @@ hq=np.stack([g("rot_0"),g("rot_1"),g("rot_2"),g("rot_3")],1); hq/=np.linalg.norm
 ho=1/(1+np.exp(-g("opacity"))); hc=np.clip(0.2820948*np.stack([g("f_dc_0"),g("f_dc_1"),g("f_dc_2")],1)+0.5,0,1)
 # crop: drop green bg + keep head cluster (front + upper)
 green=hc[:,1]-np.maximum(hc[:,0],hc[:,2]); ymin,ymax=hm[:,1].min(),hm[:,1].max()
-keep=(green<0.02)&(ho>0.3)&(hm[:,1]<ymin+0.55*(ymax-ymin))&(hm[:,2]<np.percentile(hm[:,2],70))
+keep=(green<0.02)&(ho>0.3)&(hm[:,1]<ymin+a.hcrop*(ymax-ymin))&(hm[:,2]<np.percentile(hm[:,2],75))
 hm,hs,hq,ho,hc=hm[keep],hs[keep],hq[keep],ho[keep],hc[keep]
 print("SHARP head splats after crop:",len(hm))
 # head metric box (SHARP frame, OpenCV y-down)
 hcen=hm.mean(0); hheight=hm[:,1].max()-hm[:,1].min()
 
 # --- SMPL-X body surface splats (neutral, faces +z via yaw 180) ---
+import json
 model=smplx.create("/work/models",model_type="smplx",gender="male",num_betas=10,use_pca=False,flat_hand_mean=True,num_expression_coeffs=100,batch_size=1)
 go=np.zeros((1,3),np.float32)  # go=0 faces +z (camera)
+betas=np.zeros((1,10),np.float32)
+if a.betas:
+    betas[0]=np.array(json.load(open(a.sam3d))["shape_params"][:10],np.float32)  # greenman's build
+bp=np.zeros((1,21,3),np.float32)                                   # A-pose: lower the T-pose arms
+bp[0,15]=[0,0,-1.15]; bp[0,16]=[0,0,1.15]                          # L/R shoulder down
 with torch.no_grad():
-    o=model(global_orient=torch.from_numpy(go),betas=torch.zeros(1,10))
+    o=model(global_orient=torch.from_numpy(go),betas=torch.from_numpy(betas),body_pose=torch.from_numpy(bp.reshape(1,-1)))
 V=o.vertices.numpy()[0].astype(np.float32); J=o.joints.numpy()[0].astype(np.float32)
 uv=np.load("/work/assets/smplx_uv_2023.npz")["uv_coordinates"].astype(np.float32)
 tex=np.asarray(Image.open("/work/assets/smplx_texture_m_alb.png").convert("RGB"),np.float32)/255.0
 bcen,bq,bs,bcol=build_face_splats(V,model.faces.astype(np.int64),uv,tex)
+# drop the bald SMPL-X head+neck (above neck joint) so the SHARP head REPLACES it
+neck_y=float(J[12,1]); kb=bcen[:,1]<neck_y
+bcen,bq,bs,bcol=bcen[kb],bq[kb],bs[kb],bcol[kb]
 # SMPL-X head extent (head joint 15 to crown)
 headj=J[15]; crown=V[:,1].max(); smplx_head_h=(crown-headj[1])*2.2
 
 # --- register SHARP head -> SMPL-X head: scale + translate (both face +z) ---
-s=smplx_head_h/max(hheight,1e-6)
+s=smplx_head_h/max(hheight,1e-6)*a.hscale
 # SHARP y is image-down; SMPL-X y is up -> flip Y when placing
 Hm=hm.copy(); Hm-=hcen; Hm[:,1]*=-1; Hm[:,2]*=-1; Hm*=s
-target=np.array([headj[0], headj[1]+0.04, headj[2]],np.float32)   # nudge up toward crown
+target=np.array([headj[0], headj[1]+0.04+a.hy, headj[2]+a.hz],np.float32)
 Hm+=target
 Hs=hs*s
 # combine
