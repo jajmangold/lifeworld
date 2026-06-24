@@ -18,7 +18,7 @@ ap.add_argument("--arkit",default="/o/greenman_mp6.json"); ap.add_argument("--au
 ap.add_argument("--out",required=True); ap.add_argument("--frames",type=int,default=40); ap.add_argument("--res",type=int,default=420)
 ap.add_argument("--sam3d",default="/o/sam3d/greenman_skel.json"); ap.add_argument("--betas",action="store_true")
 ap.add_argument("--hcrop",type=float,default=0.66); ap.add_argument("--hscale",type=float,default=0.9)
-ap.add_argument("--hy",type=float,default=0.05); ap.add_argument("--hz",type=float,default=0.04); ap.add_argument("--closeup",action="store_true"); ap.add_argument("--jawgain",type=float,default=2.4)
+ap.add_argument("--hy",type=float,default=0.05); ap.add_argument("--hz",type=float,default=0.04); ap.add_argument("--closeup",action="store_true"); ap.add_argument("--jawgain",type=float,default=2.4); ap.add_argument("--upper",action="store_true")
 a=ap.parse_args()
 def look_at(eye,tgt,up=(0,1,0)):
     eye=np.array(eye,np.float32);tgt=np.array(tgt,np.float32);up=np.array(up,np.float32)
@@ -36,7 +36,7 @@ hm=np.stack([g("x"),g("y"),g("z")],1); hs=np.exp(np.stack([g("scale_0"),g("scale
 hq=np.stack([g("rot_0"),g("rot_1"),g("rot_2"),g("rot_3")],1); hq/=np.linalg.norm(hq,axis=1,keepdims=True)
 ho=1/(1+np.exp(-g("opacity"))); hc=np.clip(0.2820948*np.stack([g("f_dc_0"),g("f_dc_1"),g("f_dc_2")],1)+0.5,0,1)
 green=hc[:,1]-np.maximum(hc[:,0],hc[:,2]); ymin,ymax=hm[:,1].min(),hm[:,1].max()
-keep=(green<0.02)&(ho>0.3)&(hm[:,1]<ymin+a.hcrop*(ymax-ymin))&(hm[:,2]<np.percentile(hm[:,2],72))
+keep=(green<0.02)&(ho>0.3)&(hm[:,1]<ymin+a.hcrop*(ymax-ymin))&(hm[:,2]<np.percentile(hm[:,2],85))
 hm,hs,hq,ho,hc=hm[keep],hs[keep],hq[keep],ho[keep],hc[keep]
 hcen=hm.mean(0); hheight=hm[:,1].max()-hm[:,1].min()
 
@@ -58,13 +58,17 @@ ap_pose=np.zeros((1,21,3),np.float32); ap_pose[0,15]=[0,0,-1.15]; ap_pose[0,16]=
 with torch.no_grad():
     o0=model(global_orient=torch.zeros(1,3),betas=torch.from_numpy(betas),body_pose=torch.from_numpy(ap_pose.reshape(1,-1)))
 V0=o0.vertices.numpy()[0].astype(np.float32); J0=o0.joints.numpy()[0].astype(np.float32)
-neck_y=float(J0[12,1]); headj=J0[15]; crown=V0[:,1].max(); smplx_head_h=(crown-headj[1])*2.2
-# register SHARP head -> neutral head (scale, 180-about-X, translate)
-s=smplx_head_h/max(hheight,1e-6)*a.hscale
-Hm0=hm-hcen; Hm0[:,1]*=-1; Hm0[:,2]*=-1; Hm0*=s; Hm0+=np.array([headj[0],headj[1]+0.04+a.hy,headj[2]+a.hz],np.float32)
+neck_y=float(J0[12,1]); chest_y=float(J0[9,1]); headj=J0[15]; crown=V0[:,1].max(); smplx_head_h=(crown-headj[1])*2.2
+# register SHARP -> SMPL-X: scale by vertical SPAN (upper: crown->chest so shoulders land on body), 180-about-X
+s=((crown-chest_y) if a.upper else smplx_head_h)/max(hheight,1e-6)*a.hscale
+Hm0=hm-hcen; Hm0[:,1]*=-1; Hm0[:,2]*=-1; Hm0*=s
+if a.upper:                                               # align bust top to crown so it fills crown->chest, no gap
+    Hm0+=np.array([headj[0], crown-Hm0[:,1].max()+a.hy, headj[2]+a.hz],np.float32)
+else:
+    Hm0+=np.array([headj[0],headj[1]+0.04+a.hy,headj[2]+a.hz],np.float32)
 hq=np.stack([-hq[:,1],hq[:,0],-hq[:,3],hq[:,2]],1); Hs=hs*s
 # head triangles + bind each SHARP gaussian to nearest (local coords in triangle frame)
-tcen=V0[faces].mean(1); head_tri=np.where(tcen[:,1]>neck_y-0.02)[0]
+tcen=V0[faces].mean(1); _bc=(chest_y if a.upper else neck_y-0.02); head_tri=np.where(tcen[:,1]>_bc)[0]
 c0,B0=tri_frames(V0,faces[head_tri])
 nn=cKDTree(c0).query(Hm0)[1]                              # nearest head triangle per gaussian
 local=np.einsum('nij,nj->ni', np.transpose(B0[nn],(0,2,1)), Hm0-c0[nn]).astype(np.float32)
@@ -97,14 +101,15 @@ for fi in range(F):
     R=np.einsum('nij,nkj->nik',B1[nn],B0[nn])             # per-gaussian rotation B1 B0^T
     Hq=quat_mul(mat2quat(R),hq); Hq/=np.linalg.norm(Hq,axis=1,keepdims=True)
     bcen,bq,bs,bcol=build_face_splats(V,faces,uv,tex)
-    keepb=bcen[:,1]<headj[1]+0.04; bcen,bq,bs,bcol=bcen[keepb],bq[keepb],bs[keepb],bcol[keepb]
+    keepb=bcen[:,1]<(chest_y if a.upper else headj[1]+0.04); bcen,bq,bs,bcol=bcen[keepb],bq[keepb],bs[keepb],bcol[keepb]
     means=np.concatenate([Hm,bcen]);quats=np.concatenate([Hq,bq]);scales=np.concatenate([Hs,bs])
     opac=np.concatenate([ho,np.ones(len(bcen))]);cols=np.concatenate([hc,bcol])
     T=[torch.tensor(x.astype(np.float32),device=dev) for x in (means,quats,scales,opac,cols)]
     if fi==0:
         mn,mx=means.min(0),means.max(0); ctr=((mn+mx)/2).copy(); bh=mx[1]-mn[1]; dist=bh/(2*np.tan(0.5*YFOV))*1.15
         if a.closeup:
-            ctr=np.array([0.0, headj[1]-0.14, mx[2]],np.float32); dist=0.62/(2*np.tan(0.5*YFOV))*1.1
+            cy=(chest_y+0.12) if a.upper else (headj[1]-0.14); sh=0.78 if a.upper else 0.62
+            ctr=np.array([0.0, cy, mx[2]],np.float32); dist=sh/(2*np.tan(0.5*YFOV))*1.1
     vm=torch.tensor(look_at([ctr[0],ctr[1],ctr[2]+dist],[ctr[0],ctr[1],ctr[2]]),device=dev)[None]
     out,_,_=rasterization(T[0],T[1],T[2],T[3],T[4],vm,K,res,res)
     Image.fromarray((out[0].clamp(0,1)*255).byte().cpu().numpy()).save(f"{FRAMEDIR}/f_{fi:04d}.png")
