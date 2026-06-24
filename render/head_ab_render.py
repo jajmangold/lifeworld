@@ -37,14 +37,15 @@ dist = 0.34 / np.tan(0.5 * YFOV)
 cam = _aim([0, headc, dist], ctr)
 r = pyrender.OffscreenRenderer(420, 520); os.makedirs("/tmp/headab", exist_ok=True)
 for fi in range(F):
-    s = pyrender.Scene(bg_color=[0.1, 0.1, 0.12, 1], ambient_light=[0.5, 0.5, 0.5])
+    s = pyrender.Scene(bg_color=[0.18, 0.18, 0.2, 1], ambient_light=[0.85, 0.85, 0.85])
     if _tex is not None:
         s.add(build_mesh(v[fi], faces, _uv, _tex))
     else:
         s.add(pyrender.Mesh.from_trimesh(trimesh.Trimesh(v[fi], faces, process=False), smooth=True))
     s.add(pyrender.PerspectiveCamera(yfov=YFOV, aspectRatio=420 / 520), pose=cam)
-    s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=3.2), pose=_aim([1, headc + 2, dist + 1], ctr))
-    s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=1.3), pose=_aim([-2, headc + 1, dist], ctr))
+    s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=6.5), pose=_aim([1, headc + 2, dist + 1], ctr))
+    s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=4.0), pose=_aim([-2, headc + 1, dist], ctr))
+    s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=2.5), pose=_aim([0, headc, dist + 2], ctr))  # frontal fill
     Image.fromarray(r.render(s)[0]).save(f"/tmp/headab/f_{fi:04d}.png")
 r.delete()
 subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(a.fps), "-i", "/tmp/headab/f_%04d.png",
