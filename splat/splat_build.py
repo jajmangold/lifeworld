@@ -14,7 +14,7 @@ def face_color(faces, uv, tex):                        # per-face mean texture c
     px = np.clip((loops[:,:,0]*Wt).astype(int), 0, Wt-1); py = np.clip(((1-loops[:,:,1])*Ht).astype(int), 0, Ht-1)
     return tex[py, px].mean(1).astype(np.float32)      # (Ftri,3)
 
-def build_face_splats(V, faces, uv, tex, thin=0.18):
+def build_face_splats(V, faces, uv, tex, thin=0.18, cols=None):
     """V (Nv,3) one frame. Returns surface splats for that frame."""
     tri = V[faces]                                     # (Ftri,3,3)
     cen = tri.mean(1)                                  # centroids = means
@@ -27,5 +27,5 @@ def build_face_splats(V, faces, uv, tex, thin=0.18):
     quats = _quat_from_R(R)
     rad = np.sqrt(np.clip(area[:,0], 1e-9, None)) * 0.9     # in-plane size ~ triangle scale
     scales = np.stack([rad, rad, rad*thin], 1).astype(np.float32)  # flat disk along normal
-    cols = face_color(faces, uv, tex)
+    if cols is None: cols = face_color(faces, uv, tex)
     return cen.astype(np.float32), quats, scales, cols

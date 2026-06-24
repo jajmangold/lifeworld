@@ -14,9 +14,10 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--out", required=True); ap.add_argument("--frames", type=int, default=16)
 ap.add_argument("--static", action="store_true"); ap.add_argument("--multiview", action="store_true")
 ap.add_argument("--arkit", default="/lw/output/greenman_mp6.json")
-ap.add_argument("--scale", type=float, default=0.008); ap.add_argument("--res", type=int, default=320); ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--mode", default="face")
+ap.add_argument("--scale", type=float, default=0.008); ap.add_argument("--res", type=int, default=320); ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--mode", default="face"); ap.add_argument("--facecolor", default=None)
 a = ap.parse_args()
 F = 1 if a.static else a.frames
+BAKED = np.load(a.facecolor) if a.facecolor else None
 
 # ---- per-vertex texture color (assign each vertex the UV of a corner that uses it) ----
 uv = np.load("/work/assets/smplx_uv_2023.npz")["uv_coordinates"].astype(np.float32)  # (loops,2)
@@ -67,7 +68,7 @@ for fi in range(F):
     vm=torch.tensor(look_at(eye,[0,headc,0]),device=dev)[None]
     vf=V[fi if not a.static else 0]
     if a.mode=="face":
-        mn,qz,sc,cl=build_face_splats(vf,faces,uv,tex)
+        mn,qz,sc,cl=build_face_splats(vf,faces,uv,tex,cols=BAKED)
         means=torch.tensor(mn,device=dev); q=torch.tensor(qz,device=dev); s=torch.tensor(sc,device=dev)
         op=torch.ones(len(mn),device=dev); col=torch.tensor(cl,device=dev)
         out,_,_=rasterization(means,q,s,op,col,vm,K,res,res)
