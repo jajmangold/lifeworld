@@ -112,10 +112,12 @@ betas = np.zeros((1, 10), np.float32)
 model = smplx.create("/work/models", model_type="smplx", gender=a.gender, num_betas=10,
                      use_pca=False, flat_hand_mean=True, num_expression_coeffs=100, batch_size=F)
 with torch.no_grad():
-    v = model(betas=torch.from_numpy(np.tile(betas, (F, 1))), global_orient=torch.from_numpy(go),
+    _o = model(betas=torch.from_numpy(np.tile(betas, (F, 1))), global_orient=torch.from_numpy(go),
               body_pose=torch.from_numpy(body), transl=torch.from_numpy(transl),
               expression=torch.from_numpy(expr), jaw_pose=torch.from_numpy(jaw),
-              leye_pose=torch.from_numpy(leye), reye_pose=torch.from_numpy(reye)).vertices.numpy().astype(np.float32)
+              leye_pose=torch.from_numpy(leye), reye_pose=torch.from_numpy(reye))
+    v = _o.vertices.numpy().astype(np.float32)
+    Jf = _o.joints.numpy().astype(np.float32)[:, [85, 76, 89], :]   # eyeL, eyeR, nose (face-lock landmarks)
 faces = model.faces.astype(np.int64)
 uv = np.load(a.uv)["uv_coordinates"]; tex = Image.open(a.tex).convert("RGB")
 lip = lip_region(model, betas[0])["idx"]
@@ -127,10 +129,17 @@ cen = v.mean(1); shot_h = (head - pelvis) * 2.2
 YFOV = 0.7; dist = shot_h / (2 * np.tan(0.5 * YFOV)) * 1.1
 r = pyrender.OffscreenRenderer(540, 720); os.makedirs("/tmp/combo_f", exist_ok=True)
 DEPTHDIR = os.path.splitext(a.out)[0] + "_depth"; os.makedirs(DEPTHDIR, exist_ok=True)  # for depth-aware face composite
+RW, RH = 540, 720; _fy = 1.0 / np.tan(YFOV / 2); _asp = RW / RH
+def _project(P3, campose):                                       # world pts (N,3) -> image (N,2)
+    inv = np.linalg.inv(campose); pc = (inv @ np.c_[P3, np.ones(len(P3))].T).T[:, :3]
+    z = -pc[:, 2]; u = (pc[:, 0] * _fy / _asp / z + 1) / 2 * RW; vv = (1 - pc[:, 1] * _fy / z) / 2 * RH
+    return np.stack([u, vv], 1)
+LMK = np.zeros((F, 3, 2), np.float32)                            # eyeL,eyeR,nose projected (face-lock)
 for fi in range(F):
     cy = head - shot_h * 0.42
     ctr = np.array([cen[fi, 0], cy, cen[fi, 2]], np.float32)
     cam = _aim([ctr[0], ctr[1], ctr[2] + dist], ctr)
+    LMK[fi] = _project(Jf[fi], cam)
     s = pyrender.Scene(bg_color=[float(x) for x in a.bg.split(",")] + [1], ambient_light=[0.5, 0.5, 0.5])
     s.add(build_mesh(v[fi], faces, uv, tex))
     if jaw[fi, 0] > 0.05:
@@ -142,6 +151,7 @@ for fi in range(F):
     Image.fromarray(color).save(f"/tmp/combo_f/f_{fi:04d}.png")
     np.save(f"{DEPTHDIR}/{fi:04d}.npy", depth.astype(np.float32))   # camera depth (m); 0 = bg
 r.delete()
+np.save(os.path.splitext(a.out)[0] + "_lmk.npy", LMK)              # eyeL,eyeR,nose 2D per frame (face-lock)
 subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", "/tmp/combo_f/f_%04d.png",
                 "-i", a.audio,
                 # hold last frame so video outlasts the (AAC-inflated) audio; adelay = silent pre-roll
