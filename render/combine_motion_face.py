@@ -23,6 +23,8 @@ ap.add_argument("--mappings", default="/work/tools/mp2flame/mappings")
 ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--out", required=True)
 ap.add_argument("--viseme-delay-ms", type=float, default=150.0)   # LAM visemes lead audio; eye-tuned
 ap.add_argument("--pre-roll", type=float, default=0.6)            # idle beat (mouth closed) before speech
+ap.add_argument("--exp-gain", type=float, default=0.4)            # FLAME expression scale
+ap.add_argument("--jaw-gain", type=float, default=1.0)            # jaw-open amplification (mouth)
 a = ap.parse_args()
 
 # ---- Kimodo body at NATIVE frame rate (do NOT resample rotations: linear-interpolating
@@ -57,7 +59,8 @@ go = mat2aa(M[None] @ aa2mat(go0)).astype(np.float32)
 transl = (tr0 @ M.T).astype(np.float32)
 
 # ---- LAM/FLAME face, delayed vs audio (LAM visemes lead; eye-tuned). Neutral-fill the head. ----
-expr, jaw, leye, reye = FlameDriver(a.mappings).drive(json.load(open(a.arkit)), F, FPS, gain=0.4)
+expr, jaw, leye, reye = FlameDriver(a.mappings).drive(json.load(open(a.arkit)), F, FPS, gain=a.exp_gain)
+jaw = jaw * a.jaw_gain                                            # open the mouth wider
 DELAY = int(round(a.viseme_delay_ms / 1000.0 * FPS))
 if DELAY > 0:
     pad = lambda x: np.concatenate([np.zeros((DELAY,) + x.shape[1:], x.dtype), x[:-DELAY]], 0)
