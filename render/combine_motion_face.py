@@ -105,6 +105,7 @@ ys = v[:, :, 1]; head = float(ys.max()); pelvis = float(np.median(ys))
 cen = v.mean(1); shot_h = (head - pelvis) * 2.2
 YFOV = 0.7; dist = shot_h / (2 * np.tan(0.5 * YFOV)) * 1.1
 r = pyrender.OffscreenRenderer(540, 720); os.makedirs("/tmp/combo_f", exist_ok=True)
+DEPTHDIR = os.path.splitext(a.out)[0] + "_depth"; os.makedirs(DEPTHDIR, exist_ok=True)  # for depth-aware face composite
 for fi in range(F):
     cy = head - shot_h * 0.42
     ctr = np.array([cen[fi, 0], cy, cen[fi, 2]], np.float32)
@@ -116,7 +117,9 @@ for fi in range(F):
     s.add(pyrender.PerspectiveCamera(yfov=YFOV, aspectRatio=540 / 720), pose=cam)
     s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=3.0), pose=_aim([ctr[0] + 1, ctr[1] + 2, ctr[2] + 2], ctr))
     s.add(pyrender.DirectionalLight(color=np.ones(3), intensity=1.3), pose=_aim([ctr[0] - 2, ctr[1] + 1, ctr[2] + 1], ctr))
-    Image.fromarray(r.render(s)[0]).save(f"/tmp/combo_f/f_{fi:04d}.png")
+    color, depth = r.render(s)
+    Image.fromarray(color).save(f"/tmp/combo_f/f_{fi:04d}.png")
+    np.save(f"{DEPTHDIR}/{fi:04d}.npy", depth.astype(np.float32))   # camera depth (m); 0 = bg
 r.delete()
 subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", "/tmp/combo_f/f_%04d.png",
                 "-i", a.audio,

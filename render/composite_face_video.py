@@ -11,7 +11,11 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--body", required=True); ap.add_argument("--face", required=True)
 ap.add_argument("--audio", required=True); ap.add_argument("--out", required=True)
 ap.add_argument("--body-fps", type=float, default=16.0); ap.add_argument("--face-fps", type=float, default=25.0)
+ap.add_argument("--depth-dir", default=None)   # per-frame body depth (####.npy) -> occlude face by nearer geometry (hands in front)
+ap.add_argument("--occ-delta", type=float, default=0.08)   # metres a pixel must be IN FRONT of the head to occlude the face
 a = ap.parse_args()
+import glob as _glob
+_ndepth = len(_glob.glob(os.path.join(a.depth_dir, "*.npy"))) if a.depth_dir else 0
 
 fa = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, flip_input=False, device="cuda")
 
@@ -54,7 +58,14 @@ while True:
     out = body.copy(); y0, x0 = my - bs, mx - bs
     sy0, sx0 = max(0, -y0), max(0, -x0); dy0, dx0 = max(0, y0), max(0, x0)
     dy1, dx1 = min(H, y0 + 2*bs), min(W, x0 + 2*bs); sy1, sx1 = sy0 + (dy1 - dy0), sx0 + (dx1 - dx0)
-    mm = m[sy0:sy1, sx0:sx1]
+    mm = m[sy0:sy1, sx0:sx1].copy()
+    if _ndepth:                                            # depth-aware: don't paste over nearer geometry (hands in front of face)
+        dep = np.load(os.path.join(a.depth_dir, f"{min(fi, _ndepth-1):04d}.npy"))
+        dreg = dep[dy0:dy1, dx0:dx1]; valid = dreg > 0
+        if valid.any():
+            hd = float(np.median(dreg[valid]))
+            occ = valid & (dreg < hd - a.occ_delta)        # pixel is in FRONT of the head -> hand/arm occludes
+            mm[occ] = 0.0
     out[dy0:dy1, dx0:dx1] = (fr[sy0:sy1, sx0:sx1] * mm + out[dy0:dy1, dx0:dx1] * (1 - mm)).astype(np.uint8)
     cv2.imwrite(f"{FRAMEDIR}/{fi:05d}.png", out); fi += 1
 bcap.release()
