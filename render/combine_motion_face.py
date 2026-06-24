@@ -117,7 +117,7 @@ with torch.no_grad():
               expression=torch.from_numpy(expr), jaw_pose=torch.from_numpy(jaw),
               leye_pose=torch.from_numpy(leye), reye_pose=torch.from_numpy(reye))
     v = _o.vertices.numpy().astype(np.float32)
-    Jf = _o.joints.numpy().astype(np.float32)[:, [85, 76, 89], :]   # eyeL, eyeR, nose (face-lock landmarks)
+    Jf = _o.joints.numpy().astype(np.float32)[:, [85, 76, 89, 16, 17], :]  # eyeL,eyeR,nose,shoulderL,shoulderR
 faces = model.faces.astype(np.int64)
 uv = np.load(a.uv)["uv_coordinates"]; tex = Image.open(a.tex).convert("RGB")
 lip = lip_region(model, betas[0])["idx"]
@@ -134,7 +134,7 @@ def _project(P3, campose):                                       # world pts (N,
     inv = np.linalg.inv(campose); pc = (inv @ np.c_[P3, np.ones(len(P3))].T).T[:, :3]
     z = -pc[:, 2]; u = (pc[:, 0] * _fy / _asp / z + 1) / 2 * RW; vv = (1 - pc[:, 1] * _fy / z) / 2 * RH
     return np.stack([u, vv], 1)
-LMK = np.zeros((F, 3, 2), np.float32)                            # eyeL,eyeR,nose projected (face-lock)
+LMK = np.zeros((F, 5, 2), np.float32)                            # eyeL,eyeR,nose projected (face-lock)
 for fi in range(F):
     cy = head - shot_h * 0.42
     ctr = np.array([cen[fi, 0], cy, cen[fi, 2]], np.float32)
