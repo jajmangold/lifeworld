@@ -16,7 +16,7 @@ ap.add_argument("--ply",required=True); ap.add_argument("--kimodo",required=True
 ap.add_argument("--arkit",default="/o/greenman_mp6.json"); ap.add_argument("--audio",default="/o/sermon_6s.wav")
 ap.add_argument("--out",required=True); ap.add_argument("--frames",type=int,default=40); ap.add_argument("--res",type=int,default=420)
 ap.add_argument("--sam3d",default="/o/sam3d/greenman_skel.json"); ap.add_argument("--betas",action="store_true")
-ap.add_argument("--jawgain",type=float,default=0.85); ap.add_argument("--orbit",action="store_true"); ap.add_argument("--armdown",type=float,default=1.25); ap.add_argument("--binddist",type=float,default=0.045); ap.add_argument("--closeup",action="store_true"); ap.add_argument("--cavity",action="store_true"); ap.add_argument("--armdamp",type=float,default=0.25); ap.add_argument("--k",type=int,default=4)
+ap.add_argument("--jawgain",type=float,default=0.85); ap.add_argument("--orbit",action="store_true"); ap.add_argument("--armdown",type=float,default=1.25); ap.add_argument("--binddist",type=float,default=0.045); ap.add_argument("--closeup",action="store_true"); ap.add_argument("--cavity",action="store_true"); ap.add_argument("--armdamp",type=float,default=0.25); ap.add_argument("--k",type=int,default=4); ap.add_argument("--meshmode",action="store_true"); ap.add_argument("--lbs",action="store_true")
 a=ap.parse_args()
 def look_at(eye,tgt,up=(0,1,0)):
     eye=np.array(eye,np.float32);tgt=np.array(tgt,np.float32);up=np.array(up,np.float32)
@@ -40,7 +40,7 @@ hm=np.stack([g("x"),g("y"),g("z")],1); hs=np.exp(np.stack([g("scale_0"),g("scale
 hq=np.stack([g("rot_0"),g("rot_1"),g("rot_2"),g("rot_3")],1); hq/=np.linalg.norm(hq,axis=1,keepdims=True)
 ho=1/(1+np.exp(-g("opacity"))); hc=np.clip(0.2820948*np.stack([g("f_dc_0"),g("f_dc_1"),g("f_dc_2")],1)+0.5,0,1)
 green=hc[:,1]-np.maximum(hc[:,0],hc[:,2])
-keep=(green<0.02)&(ho>0.3)&(hm[:,2]<np.percentile(hm[:,2],55))   # person is in front; green bg is deeper
+keep=np.ones(len(hm),bool) if a.meshmode else ((green<0.02)&(ho>0.3)&(hm[:,2]<np.percentile(hm[:,2],55)))
 hm,hs,hq,ho,hc=hm[keep],hs[keep],hq[keep],ho[keep],hc[keep]
 print("SHARP person splats:",len(hm))
 
@@ -59,9 +59,10 @@ with torch.no_grad():
     o0=model(global_orient=torch.zeros(1,3),betas=torch.from_numpy(betas),body_pose=torch.from_numpy(ap_pose.reshape(1,-1)))
 V0=o0.vertices.numpy()[0].astype(np.float32)
 # register SHARP body -> SMPL-X: OpenCV->y-up (180-X), scale by HEIGHT, align feet + center
-Hm0=hm.copy(); Hm0[:,1]*=-1; Hm0[:,2]*=-1
+Hm0=hm.copy()
+if not a.meshmode: Hm0[:,1]*=-1; Hm0[:,2]*=-1
 sH=(V0[:,1].max()-V0[:,1].min())/max(Hm0[:,1].max()-Hm0[:,1].min(),1e-6)
-Hm0*=sH; hq=np.stack([-hq[:,1],hq[:,0],-hq[:,3],hq[:,2]],1); Hs=hs*sH
+Hm0*=sH; hq=hq if a.meshmode else np.stack([-hq[:,1],hq[:,0],-hq[:,3],hq[:,2]],1); Hs=hs*sH
 Hm0[:,0]+=V0[:,0].mean()-Hm0[:,0].mean(); Hm0[:,2]+=V0[:,2].mean()-Hm0[:,2].mean()
 Hm0[:,1]+=V0[:,1].min()-Hm0[:,1].min()                           # feet to feet
 # bind via K-NEAREST-triangle SKINNING (blend K frames -> smooth across joints, no single-tri smear)
@@ -94,12 +95,29 @@ with torch.no_grad():
 VV=O.vertices.numpy().astype(np.float32)
 Hq=torch.tensor(hq.astype(np.float32),device=dev); Hs_t=torch.tensor(Hs.astype(np.float32),device=dev)
 ho_t=torch.tensor(ho.astype(np.float32),device=dev); hc_t=torch.tensor(hc.astype(np.float32),device=dev)
+# --- true LBS skinning setup (per-splat SMPL-X skin weights + bone transforms) ---
+if a.lbs:
+    import smplx.lbs as LBS
+    LW=model.lbs_weights.detach().numpy()[cKDTree(V0).query(Hm0)[1]].astype(np.float32)   # (M,55) nearest-vertex weights
+    Hm0h=np.concatenate([Hm0,np.ones((len(Hm0),1),np.float32)],1)
+    Jrest=LBS.vertices2joints(model.J_regressor, model.v_template.unsqueeze(0)+LBS.blend_shapes(torch.from_numpy(betas),model.shapedirs[:,:,:10]))
+    def jointA(bp21,jaw3):                               # (B,21,3),(B,3) -> A (B,55,4,4) numpy
+        Bn=len(bp21); fp=np.zeros((Bn,55,3),np.float32); fp[:,1:22]=bp21; fp[:,22]=jaw3
+        rot=LBS.batch_rodrigues(torch.from_numpy(fp.reshape(-1,3))).reshape(Bn,55,3,3)
+        _,A=LBS.batch_rigid_transform(rot,Jrest.expand(Bn,-1,-1),model.parents); return A.detach().numpy()
+    Abind_inv=np.linalg.inv(jointA(ap_pose,np.zeros((1,3),np.float32))[0])                 # (55,4,4)
+    deltaF=np.einsum('fjxy,jyz->fjxz',jointA(bp,j),Abind_inv).astype(np.float32)           # (F,55,4,4) bind->frame
 angs=np.radians(np.linspace(-30,30,F)) if a.orbit else np.zeros(F)
 for fi in range(F):
-    V=VV[fi]; c1,B1=tri_frames(V,faces)
-    posK=c1[NN]+np.einsum('mkij,mkj->mki',B1[NN],localK)         # (M,K,3) each triangle's prediction
-    Hm=(posK*W[:,:,None]).sum(1)                                 # inverse-distance blended -> smooth across joints
-    n0=NN[:,0]; R=np.einsum('mij,mkj->mik',B1[n0],B0[n0]); HqF=quat_mul(mat2quat(R),hq); HqF/=np.linalg.norm(HqF,axis=1,keepdims=True)
+    if a.lbs:
+        Tn=np.einsum('mj,jxy->mxy',LW,deltaF[fi])               # (M,4,4) blended bone transform per splat
+        Hm=np.einsum('mxy,my->mx',Tn,Hm0h)[:,:3]
+        HqF=quat_mul(mat2quat(Tn[:,:3,:3]),hq); HqF/=np.linalg.norm(HqF,axis=1,keepdims=True)
+    else:
+        V=VV[fi]; c1,B1=tri_frames(V,faces)
+        posK=c1[NN]+np.einsum('mkij,mkj->mki',B1[NN],localK)
+        Hm=(posK*W[:,:,None]).sum(1)
+        n0=NN[:,0]; R=np.einsum('mij,mkj->mik',B1[n0],B0[n0]); HqF=quat_mul(mat2quat(R),hq); HqF/=np.linalg.norm(HqF,axis=1,keepdims=True)
     means=torch.tensor(Hm.astype(np.float32),device=dev); quats=torch.tensor(HqF.astype(np.float32),device=dev)
     if fi==0:
         mn,mx=Hm.min(0),Hm.max(0); ctr=((mn+mx)/2); bh=mx[1]-mn[1]; dist=bh/(2*np.tan(0.5*YFOV))*1.15
