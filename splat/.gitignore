@@ -3,3 +3,12 @@ _splatframes/
 *.npy
 ml-sharp/
 sharp/
+IDOL/work_dirs/
+IDOL/out/
+IDOL/*.log
+IDOL/pytorch3d/
+IDOL/sapiens/
+IDOL/gaussian-splatting/
+IDOL/simple-knn/
+IDOL/submodule/
+IDOL/build/
