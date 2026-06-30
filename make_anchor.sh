@@ -52,9 +52,17 @@ if [ "$FAST" = 1 ]; then
   log "fast mode: mux audio (viseme mouth, no swap/muse)"
   ffmpeg -y -i output/${NAME}_silent.mp4 -i "$AUDIO" -c:v libx264 -pix_fmt yuv420p -crf 18 -c:a aac -b:a 192k -shortest output/${NAME}_talk.mp4 2>/dev/null
 else
-  log "swap (keepeyes) -> $FACE"
-  docker run --rm --gpus '"device=0"' -v "$BOT/swap":/s -v "$BOT/output":/o -w /s inswap:local \
-    python local_swap_keepeyes.py /o/"$FACE" /o/${NAME}_silent.mp4 /o/${NAME}_swap.mp4 2>&1 | grep -aE 'SWAP_OK|Error'
+  log "swap (keepeyes, resident server) -> $FACE"
+  docker ps --format '{{.Names}}' | grep -q '^swap-server$' || { log "starting swap-server..."; bash "$BOT/swap/run_swap.sh"; \
+    for i in $(seq 1 20); do docker logs --tail 5 swap-server 2>&1 | tr '\r' '\n' | grep -q SWAP_SERVER_READY && break; sleep 3; done; }
+  docker exec swap-server chmod 777 /o/swap_jobs 2>/dev/null || true
+  rm -f output/swap_jobs/${NAME}.done output/swap_jobs/${NAME}.err
+  # swap WITHOUT GFPGAN (soft, fast) + save detected faces — GFPGAN is moved to a final restore pass
+  # after MuseTalk so it also sharpens the soft 256px muse mouth (same total compute, better quality).
+  printf '{"src":"/o/%s","video":"/o/%s_silent.mp4","out":"/o/%s_swap.mp4","keepeyes":true,"enhance":false,"save_faces":"/o/%s.faces.json"}\n' "$FACE" "$NAME" "$NAME" "$NAME" > output/swap_jobs/${NAME}.json
+  while [ ! -f output/swap_jobs/${NAME}.done ] && [ ! -f output/swap_jobs/${NAME}.err ]; do sleep 3; done
+  [ -f output/swap_jobs/${NAME}.err ] && { echo "SWAP ERR: $(cat output/swap_jobs/${NAME}.err)"; exit 1; }
+  log "swap done: $(cat output/swap_jobs/${NAME}.done)"
   # 16k audio for muse
   ffmpeg -y -i "$AUDIO" -ar 16000 -ac 1 output/${NAME}_16k.wav 2>/dev/null
   log "MuseTalk (last)..."
@@ -63,6 +71,21 @@ else
   while [ ! -f output/muse_jobs/${NAME}.done ] && [ ! -f output/muse_jobs/${NAME}.err ]; do sleep 5; done
   [ -f output/muse_jobs/${NAME}.err ] && { echo "MUSE ERR: $(cat output/muse_jobs/${NAME}.err)"; exit 1; }
   log "muse done: $(cat output/muse_jobs/${NAME}.done)"
+  # FINAL RESTORE: GFPGAN-keepeyes on the muse output, reusing the swap's saved faces (no re-detection).
+  # Sharpens the whole face INCLUDING the soft muse mouth; preserves blinks.
+  if [ -f output/${NAME}.faces.json ]; then
+    log "final GFPGAN restore (sharpen mouth, reuse faces)..."
+    rm -f output/swap_jobs/${NAME}r.done output/swap_jobs/${NAME}r.err
+    printf '{"mode":"restore","video":"/o/%s_talk.mp4","out":"/o/%s_sharp.mp4","faces":"/o/%s.faces.json","keepeyes":true}\n' "$NAME" "$NAME" "$NAME" > output/swap_jobs/${NAME}r.json
+    while [ ! -f output/swap_jobs/${NAME}r.done ] && [ ! -f output/swap_jobs/${NAME}r.err ]; do sleep 3; done
+    [ -f output/swap_jobs/${NAME}r.err ] && { echo "RESTORE ERR: $(cat output/swap_jobs/${NAME}r.err)"; exit 1; }
+    # restore output is video-only mp4v; re-mux the audio from the muse output, back to ${NAME}_talk.mp4
+    ffmpeg -y -i output/${NAME}_sharp.mp4 -i output/${NAME}_talk.mp4 -map 0:v -map 1:a \
+      -c:v libx264 -pix_fmt yuv420p -crf 18 -c:a copy -shortest output/${NAME}_sharpav.mp4 2>/dev/null
+    mv output/${NAME}_sharpav.mp4 output/${NAME}_talk.mp4
+    rm -f output/${NAME}_sharp.mp4
+    log "restore done: $(cat output/swap_jobs/${NAME}r.done)"
+  fi
 fi
 
 # 4) OTS GRAPHICS (optional) ------------------------------------------------------
