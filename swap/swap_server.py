@@ -78,9 +78,9 @@ def swap_video(src_path, tgt_path, out_path, keepeyes=True, do_enhance=True, sav
 
 
 def restore_video(tgt_path, out_path, faces_path, keepeyes=True):
-    # Final GFPGAN restore on a finished (post-MuseTalk) video, reusing the swap's detected faces
-    # (no re-detection). Sharpens the whole face INCLUDING the soft MuseTalk mouth; keepeyes preserves blinks.
-    faces = json.load(open(faces_path))
+    # Final GFPGAN restore on a finished (post-MuseTalk) video. If faces_path is given, reuse the swap's
+    # detected faces (no re-detection). Otherwise (e.g. baked-texture path, no swap) detect per frame.
+    faces = json.load(open(faces_path)) if (faces_path and os.path.exists(faces_path)) else None
     cap = cv2.VideoCapture(tgt_path); fps = cap.get(cv2.CAP_PROP_FPS) or 25
     out = None; n = 0; miss = 0
     while True:
@@ -89,12 +89,20 @@ def restore_video(tgt_path, out_path, faces_path, keepeyes=True):
             break
         if out is None:
             out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (fr.shape[1], fr.shape[0]))
-        f = faces[n] if n < len(faces) else None
-        if f is not None:
-            bbox, kps = f
-            fr = enhance_known(fr, bbox, kps, keepeyes=keepeyes)
+        if faces is not None:
+            f = faces[n] if n < len(faces) else None
+            if f is not None:
+                bbox, kps = f
+                fr = enhance_known(fr, bbox, kps, keepeyes=keepeyes)
+            else:
+                miss += 1
         else:
-            miss += 1
+            dets = app.get(fr)
+            if dets:
+                tf = max(dets, key=lambda d: d.bbox[2] - d.bbox[0])
+                fr = enhance(fr, tf.bbox, tf.kps, keepeyes=keepeyes)
+            else:
+                miss += 1
         out.write(fr); n += 1
     out.release()
     return n, miss
@@ -110,7 +118,7 @@ while True:
             spec = json.load(open(jf)); os.remove(jf)
             t0 = time.time()
             if spec.get("mode") == "restore":
-                n, miss = restore_video(spec["video"], spec["out"], spec["faces"], spec.get("keepeyes", True))
+                n, miss = restore_video(spec["video"], spec["out"], spec.get("faces"), spec.get("keepeyes", True))
                 tag = "RESTORE"
             else:
                 n, miss = swap_video(spec["src"], spec["video"], spec["out"], spec.get("keepeyes", True),

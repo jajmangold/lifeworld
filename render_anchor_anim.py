@@ -63,6 +63,20 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=GLB)
 arm = [o for o in bpy.data.objects if o.type=="ARMATURE"][0]
 
+# Optional: swap the head's base-color texture for a pre-baked face (anchorM baked once onto the UV);
+# this makes the render produce the target identity directly, so the per-frame face-swap can be skipped.
+_baked = os.environ.get("BAKED_HEAD_TEX") or args("--bakedtex", "")
+if _baked:
+    _hm = bpy.data.materials.get("head_Opaque_Material_Meshes_Material")
+    if _hm and _hm.use_nodes:
+        _b = next((n for n in _hm.node_tree.nodes if n.type=="BSDF_PRINCIPLED"), None)
+        if _b and _b.inputs["Base Color"].is_linked:
+            _tn = _b.inputs["Base Color"].links[0].from_node
+            if _tn.type == "TEX_IMAGE":
+                _img = bpy.data.images.load(_baked); _img.colorspace_settings.name = "sRGB"
+                _tn.image = _img
+                print("BAKED head texture applied:", _baked)
+
 # ---- arms down ----
 bpy.context.view_layer.objects.active = arm
 bpy.ops.object.mode_set(mode="POSE")
