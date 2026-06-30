@@ -12,7 +12,10 @@ ARKIT   = args("--arkit", "/work/anchor.arkit.json")
 ENVSTR  = argf("--envstr", 0.75)   # newsroom env strength (was 1.0 = too bright)
 KEY     = argf("--key", 130.0)
 FILL    = argf("--fill", 45.0)
-RIM     = argf("--rim", 90.0)       # back/hair rim light to separate head from dark bg
+RIM     = argf("--rim", 0.0)        # back/hair rim light. 0 by default: the premult-over composite
+                                    # separates the silhouette cleanly, so any rim>0 reads as a fake
+                                    # bright "silver lining" halo around hair/shoulders. Dial up only
+                                    # if a specific dark bg needs hair separation.
 EXPO    = argf("--expo", -0.9)     # exposure stops (was -0.5)
 GLB     = "/work/avatar.glb"
 PANO    = "/work/newsroom_pano.png"
