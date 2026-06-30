@@ -13,7 +13,7 @@ unpremultiply to true color first (guarded), then re-over with the feathered alp
 """
 import cv2, numpy as np, glob, os, sys
 d = sys.argv[1]
-FEATHER = float(os.environ.get("FEATHER", "1.5"))   # gaussian sigma in px for the alpha edge ramp
+FEATHER = float(os.environ.get("FEATHER", "1.0"))   # gaussian sigma in px for the alpha edge ramp
 ERODE   = int(os.environ.get("ERODE", "1"))          # px to pull the matte in before feathering
 bg = cv2.imread(os.path.join(d, "bg.png")).astype(np.float32)
 frames = sorted(glob.glob(os.path.join(d, "f[0-9][0-9][0-9][0-9].png")))

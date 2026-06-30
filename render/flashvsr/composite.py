@@ -36,8 +36,8 @@ boxmask[:, :r] *= ramp[None, :]; boxmask[:, -r:] *= ramp[None, ::-1]
 # the boundary stays the clean feathered Lanczos edge. EROD/FEAT are in 1440p px.
 matte_dir = f"/workspace/myinput/matte_{stem}"
 use_matte = os.path.isdir(matte_dir)
-EROD = int(os.environ.get("MATTE_EROD", "26"))
-FEAT = float(os.environ.get("MATTE_FEAT", "20"))
+EROD = int(os.environ.get("MATTE_EROD", "14"))
+FEAT = float(os.environ.get("MATTE_FEAT", "12"))
 ker = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*EROD+1, 2*EROD+1))
 print(f"[cmp] head-matte={'ON' if use_matte else 'OFF'} erod={EROD} feat={FEAT}", flush=True)
 
