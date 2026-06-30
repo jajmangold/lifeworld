@@ -18,7 +18,7 @@ SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"
 
-MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6
+MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6
 while [ $# -gt 0 ]; do case "$1" in
   --audio) AUDIO=$2; shift 2;; --out) OUT=$2; shift 2;; --mood) MOOD=$2; shift 2;;
   --brow) BROW=$2; shift 2;; --nod) NOD=$2; shift 2;; --browbase) BROWBASE=$2; shift 2;;
@@ -26,7 +26,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --premium) PREMIUM=1; shift;;
   --baked) BAKED=1; shift;;
   --bakedtex) BAKEDTEX=$2; shift 2;;
-  --headtex) HEADTEX=$2; shift 2;;   # improved skin/hair base texture (swap still runs); e.g. anchorM_klein_head.png
+  --headtex) HEADTEX=$2; shift 2;;   # improved skin/hair base texture (swap still runs). DEFAULT anchorM_klein_head.png; pass --headtex "" to disable
   --restore) RESTORE=$2; shift 2;;   # GFPGAN restore strength 0..1 (default 0.6; 1.0=waxy, 0=muse-soft)
   --ots) OTS=$2; shift 2;; *) echo "unknown arg: $1"; exit 1;; esac; done
 [ -z "$AUDIO" ] && { echo "need --audio"; exit 1; }
