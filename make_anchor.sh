@@ -99,6 +99,12 @@ else
     log "FlashVSR-face 2x premium upscale on rtx0 (~4min)..."
     WAN=/mnt/datadisk/containers/wan2gp
     scp -q output/${NAME}_talk.mp4 josh@rtx0:$WAN/myinput/${NAME}.mp4
+    # head matte from the render alpha frames -> confine FlashVSR sharpening inside the silhouette
+    # (no diffusion edge-ringing halo). composite.py auto-uses myinput/matte_<name>/ if present.
+    scp -q render/export_alpha_matte.py josh@rtx0:$SAMPL/
+    scp -q render/flashvsr/composite.py josh@rtx0:$WAN/composite.py
+    $RTX "docker exec sampl bash -lc 'cd /work && python3 export_alpha_matte.py output/anchor_anim output/matte_${NAME}'" 2>&1 | grep -aE 'MATTE_OK|Error'
+    $RTX "rm -rf $WAN/myinput/matte_${NAME}; cp -r $SAMPL/output/matte_${NAME} $WAN/myinput/"
     $RTX "bash $WAN/flashvsr_face.sh ${NAME}" 2>&1 | grep -aE 'FLASHVSR_OK|Error|Traceback' | tail -3
     rm -f output/${NAME}_talk.mp4   # muse wrote it as root; scp can't overwrite, only the josh-owned dir lets us unlink
     scp -q josh@rtx0:$WAN/outputs/flashvsr/wan2gp_face_fast_${NAME}_2x.mp4 output/${NAME}_talk.mp4
