@@ -12,7 +12,12 @@ usr = (f"Write a single-anchor broadcast read, ~30 seconds spoken (~80-90 words)
        "Return STRICT JSON only with keys: anchor_name (first last), kicker (1-2 words ALL CAPS e.g. BREAKING/TECH/WORLD), "
        "headline (<=6 words Title Case), screen_label (2-3 words), subhead (one short sentence <=9 words summarizing the story for the on-screen graphic), "
        "ticker (array of 6 short unrelated one-line headlines), "
-       "script (the spoken read as one string).")
+       "script (the spoken read as one string, normal written form), and "
+       "spoken_script (the SAME read but TTS-READY for a text-to-speech engine with no number/abbreviation "
+       "normalizer: write every number/date/money/percent/unit as WORDS (2026->'twenty twenty-six', "
+       "$5M->'five million dollars', 25%->'twenty-five percent'); expand abbreviations (Dr.->Doctor, St.->Saint/Street by context); "
+       "for initialism acronyms write the letters spaced so they're read aloud (NNS->'N N S', FBI->'F B I') but leave pronounceable "
+       "acronyms as words (NASA, NATO); no digits or symbols anywhere in spoken_script).")
 body = json.dumps({"model": "deepseek-v4-flash",
                    "messages": [{"role": "system", "content": sysmsg}, {"role": "user", "content": usr}],
                    "temperature": 0.8, "response_format": {"type": "json_object"}}).encode()

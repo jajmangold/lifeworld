@@ -35,6 +35,13 @@ while [ $# -gt 0 ]; do case "$1" in
 NAME=$(basename "$OUT" .mp4)
 AB=$(basename "$AUDIO")
 mkdir -p output
+# CLIP FACTORY hooks: per-segment render frame dir (so concurrent renders don't clobber) + per-resource
+# flocks. With FLOCK_DIR set (by newscast/factory.py) the kernel serializes each scarce resource
+# (render=rtx0 GPU0, premium=rtx0 GPU1, swap+muse=V100 servers) while different segments overlap across
+# resources. Unset FLOCK_DIR -> LK/UNLK are no-ops -> single-clip behaviour unchanged.
+ADIR="anchor_anim_${NAME}"                         # per-segment frame dir on rtx0 (/work/output/$ADIR)
+LK(){ [ -n "$FLOCK_DIR" ] && { eval "exec $2>$FLOCK_DIR/$1.lock"; flock "$2"; }; return 0; }   # LK <res> <fd>
+UNLK(){ [ -n "$FLOCK_DIR" ] && flock -u "$2"; return 0; }
 log(){ echo "[make_anchor $(date +%H:%M:%S)] $*"; }
 
 # 1) PERFORMANCE ------------------------------------------------------------------
@@ -67,10 +74,12 @@ if [ -n "$SCREEN" ]; then
   BENV="${BENV}NEWS_SCREEN=/work/$SB "
   log "broadcast mode: 3D video wall $SB (reframe MCU + anchor left)"
 fi
-$RTX "docker exec sampl bash -lc 'cd /work && rm -f output/anchor_anim/f*.png && ${BENV}CUDA_VISIBLE_DEVICES=0 /opt/blender/blender --background --python render_anchor_anim.py -- --arkit /work/${NAME}.perf.json > /work/output/${NAME}_render.log 2>&1; echo DONE_RC=\$? >> /work/output/${NAME}_render.log'"
-# premultiplied-over composite (clean silhouette edges) then encode
-$RTX "docker exec sampl bash -lc 'cd /work/output/anchor_anim && rm -f c[0-9]*.png && python3 /work/composite_premult.py /work/output/anchor_anim'" 2>&1 | grep -aE 'COMPOSITE_OK|Error' | tail -1
-$RTX "docker exec sampl bash -lc 'cd /work/output/anchor_anim && ffmpeg -y -framerate 25 -i c%04d.png -c:v libx264 -pix_fmt yuv420p -crf 18 /work/output/${NAME}_silent.mp4 2>&1 | tail -1'" >/dev/null
+LK render 201   # serialize rtx0 GPU0 across segments (released right after Blender exits)
+$RTX "docker exec sampl bash -lc 'cd /work && mkdir -p output/$ADIR && rm -f output/$ADIR/f*.png && ${BENV}ANCHOR_OUT=/work/output/$ADIR/ CUDA_VISIBLE_DEVICES=0 /opt/blender/blender --background --python render_anchor_anim.py -- --arkit /work/${NAME}.perf.json > /work/output/${NAME}_render.log 2>&1; echo DONE_RC=\$? >> /work/output/${NAME}_render.log'"
+UNLK render 201
+# premultiplied-over composite (clean silhouette edges) then encode (CPU — off the GPU lock)
+$RTX "docker exec sampl bash -lc 'cd /work/output/$ADIR && rm -f c[0-9]*.png && python3 /work/composite_premult.py /work/output/$ADIR'" 2>&1 | grep -aE 'COMPOSITE_OK|Error' | tail -1
+$RTX "docker exec sampl bash -lc 'cd /work/output/$ADIR && ffmpeg -y -framerate 25 -i c%04d.png -c:v libx264 -pix_fmt yuv420p -crf 18 /work/output/${NAME}_silent.mp4 2>&1 | tail -1'" >/dev/null
 scp -q josh@rtx0:$SAMPL/output/${NAME}_silent.mp4 output/${NAME}_silent.mp4
 log "render done -> output/${NAME}_silent.mp4"
 
@@ -89,10 +98,12 @@ else
       for i in $(seq 1 20); do docker logs --tail 5 swap-server 2>&1 | tr '\r' '\n' | grep -q SWAP_SERVER_READY && break; sleep 3; done; }
     docker exec swap-server chmod 777 /o/swap_jobs 2>/dev/null || true
     rm -f output/swap_jobs/${NAME}.done output/swap_jobs/${NAME}.err
+    LK swap 202   # serialize the V100 swap-server across segments
     # swap WITHOUT GFPGAN (soft, fast) + save detected faces — GFPGAN is moved to a final restore pass
     # after MuseTalk so it also sharpens the soft 256px muse mouth (same total compute, better quality).
     printf '{"src":"/o/%s","video":"/o/%s_silent.mp4","out":"/o/%s_swap.mp4","keepeyes":true,"enhance":false,"save_faces":"/o/%s.faces.json"}\n' "$FACE" "$NAME" "$NAME" "$NAME" > output/swap_jobs/${NAME}.json
     while [ ! -f output/swap_jobs/${NAME}.done ] && [ ! -f output/swap_jobs/${NAME}.err ]; do sleep 3; done
+    UNLK swap 202
     [ -f output/swap_jobs/${NAME}.err ] && { echo "SWAP ERR: $(cat output/swap_jobs/${NAME}.err)"; exit 1; }
     log "swap done: $(cat output/swap_jobs/${NAME}.done)"
     MUSE_IN=${NAME}_swap
@@ -103,8 +114,10 @@ else
   ffmpeg -y -i "$AUDIO" -af "highpass=f=70,agate=threshold=0.045:ratio=12:attack=6:release=180:range=0.0,agate=threshold=0.02:ratio=6:attack=10:release=250:range=0.0" -ar 16000 -ac 1 output/${NAME}_16k.wav 2>/dev/null
   log "MuseTalk (last)..."
   rm -f output/muse_jobs/${NAME}.done output/muse_jobs/${NAME}.err
+  LK muse 203   # serialize the V100 muse-server across segments
   printf '{"video":"/io/%s.mp4","audio":"/io/%s_16k.wav","out":"/io/%s_talk.mp4"}\n' "$MUSE_IN" "$NAME" "$NAME" > output/muse_jobs/${NAME}.json
   while [ ! -f output/muse_jobs/${NAME}.done ] && [ ! -f output/muse_jobs/${NAME}.err ]; do sleep 5; done
+  UNLK muse 203
   [ -f output/muse_jobs/${NAME}.err ] && { echo "MUSE ERR: $(cat output/muse_jobs/${NAME}.err)"; exit 1; }
   log "muse done: $(cat output/muse_jobs/${NAME}.done)"
   # MOUTH-FREEZE: MuseTalk animates the lips even on true silence -> jitter in quiet moments. Replace the
@@ -130,10 +143,13 @@ else
     # head matte from the render alpha frames -> confine FlashVSR sharpening inside the silhouette
     # (no diffusion edge-ringing halo). composite.py auto-uses myinput/matte_<name>/ if present.
     scp -q render/export_alpha_matte.py josh@rtx0:$SAMPL/
-    scp -q render/flashvsr/composite.py josh@rtx0:$WAN/composite.py
-    $RTX "docker exec sampl bash -lc 'cd /work && python3 export_alpha_matte.py output/anchor_anim output/matte_${NAME}'" 2>&1 | grep -aE 'MATTE_OK|Error'
+    scp -q render/flashvsr/composite.py render/flashvsr/head_up.py render/flashvsr/detect_crop.py render/flashvsr/flashvsr_face.sh josh@rtx0:$WAN/
+    # matte from THIS segment's render frame dir (clip factory: $ADIR is per-segment)
+    $RTX "docker exec sampl bash -lc 'cd /work && python3 export_alpha_matte.py output/$ADIR output/matte_${NAME}'" 2>&1 | grep -aE 'MATTE_OK|Error'
     $RTX "rm -rf $WAN/myinput/matte_${NAME}; cp -r $SAMPL/output/matte_${NAME} $WAN/myinput/"
-    $RTX "bash $WAN/flashvsr_face.sh ${NAME}" 2>&1 | grep -aE 'FLASHVSR_OK|Error|Traceback' | tail -3
+    LK premium 204   # serialize rtx0 GPU1 (FlashVSR) across segments — overlaps with another seg's render on GPU0
+    $RTX "ULTRA=${ULTRA:-0} bash $WAN/flashvsr_face.sh ${NAME}" 2>&1 | grep -aE 'FLASHVSR_OK|Error|Traceback' | tail -3
+    UNLK premium 204
     rm -f output/${NAME}_talk.mp4   # muse wrote it as root; scp can't overwrite, only the josh-owned dir lets us unlink
     scp -q josh@rtx0:$WAN/outputs/flashvsr/wan2gp_face_fast_${NAME}_2x.mp4 output/${NAME}_talk.mp4
     OTSW=860   # OTS panels at 2x for the 1440p canvas

@@ -19,7 +19,9 @@ RIM     = argf("--rim", 0.0)        # back/hair rim light. 0 by default: the pre
 EXPO    = argf("--expo", -0.9)     # exposure stops (was -0.5)
 GLB     = "/work/avatar.glb"
 PANO    = "/work/newsroom_pano.png"
-OUT     = "/work/output/anchor_anim/"
+OUT     = os.environ.get("ANCHOR_OUT", "/work/output/anchor_anim/")  # per-segment frame dir (clip factory)
+if not OUT.endswith("/"): OUT += "/"
+os.makedirs(OUT, exist_ok=True)
 os.makedirs(OUT, exist_ok=True)
 
 # ---- load ARKit driving coeffs (blinks/brows/micro from FLOAT->MediaPipe) ----
