@@ -93,8 +93,43 @@ phs = rng.uniform(0, 2*math.pi, 3); frq = [0.05, 0.09, 0.13]
 drift = sum(a*np.sin(2*math.pi*f*t_sec + p) for a, f, p in zip([0.05, 0.03, 0.02], frq, phs))
 drift = np.clip(drift, -0.06, 0.10)
 
-# ---- emphasis from audio: brow-raise + head nod on stressed peaks ----------------
-emph_brow = np.zeros(T); head = np.zeros((T, 3))
+# ---- HEAD MOTION: layered natural idle (coherent drift + breathing + micro-saccades) + speech emphasis
+# Real heads are never still. Replace the old dead-still + random sin(frame) jerk with procedural idle:
+#   coherent fractal-noise drift (low freq = calm) + a breathing pitch-bob + occasional eased micro-saccades,
+#   scaled up a touch while speaking and settling (never freezing) in pauses. All seeded -> reproducible.
+IDLE = float(arg("--idle", "1.0"))     # idle-motion scale (0 = perfectly still)
+D2R = math.pi / 180.0
+emph_brow = np.zeros(T); head = np.zeros((T, 3))   # cols: pitch, yaw, roll (radians)
+
+def _fractal(amps_deg, freqs):         # cheap 1D coherent noise = sum of incommensurate low sines
+    ph = rng.uniform(0, 2*math.pi, len(freqs))
+    return sum(a*np.sin(2*math.pi*f*t_sec + p) for a, f, p in zip(amps_deg, freqs, ph)) * D2R
+yaw_idle   = _fractal([0.7, 0.4, 0.25], [0.06, 0.11, 0.17])
+pitch_idle = _fractal([0.5, 0.3, 0.20], [0.05, 0.10, 0.16])
+roll_idle  = _fractal([0.4, 0.25],      [0.06, 0.12])
+
+# breathing: ~15 breaths/min pitch bob, slight slow period jitter so it isn't metronomic
+breath_phase = 2*math.pi*0.25*t_sec + 0.5*np.sin(2*math.pi*0.03*t_sec + rng.uniform(0, 6))
+breath = (0.35*D2R) * np.sin(breath_phase)
+
+# micro-saccades: Poisson ~1/5.5s, eased small step that decays (direction coherent w/ the drift, not random)
+sacc_yaw = np.zeros(T); sacc_pitch = np.zeros(T); i = int(1.5*FPS)
+while i < T-1:
+    i += max(int(0.8*FPS), int(rng.exponential(5.5) * FPS))
+    if i >= T-1: break
+    dy = math.copysign(rng.uniform(0.5, 1.1), yaw_idle[i] or 1.0) * D2R
+    dp = rng.uniform(-0.4, 0.4) * D2R
+    tt = np.clip(t_sec - t_sec[i], 0, None)
+    ease = np.where(t_sec >= t_sec[i], (1 - np.exp(-tt/0.18)) * np.exp(-tt/3.0), 0.0)
+    sacc_yaw += dy*ease; sacc_pitch += dp*ease
+
+# speech activity -> idle gain (a little more motion while talking, settle in pauses but never freeze)
+_wlen = max(1, int(0.5*FPS))
+spk = np.convolve(np.clip(env, 0, 1), np.ones(_wlen)/_wlen, mode="same")
+idle_gain = np.convolve(0.85 + 0.30*np.clip(spk, 0, 1), np.ones(_wlen)/_wlen, mode="same")
+
+# emphasis nod on stressed peaks (chin-down) + a tiny COHERENT yaw (sign from the drift, not sin(frame))
+emph_pitch = np.zeros(T); emph_yaw = np.zeros(T)
 if env.any():
     thr = np.percentile(env, 68)
     win = np.array([0.2, 0.55, 0.9, 1.0, 0.85, 0.6, 0.35, 0.15])  # ease pulse
@@ -102,13 +137,21 @@ if env.any():
     for i in range(1, T-1):
         if env[i] > thr and env[i] >= env[i-1] and env[i] > env[i+1] and (i - last) >= refr:
             g = M["emph"] * min(1.0, (env[i]-thr)/(1.0-thr+1e-6)) * rng.uniform(0.8, 1.1)
+            ydir = math.copysign(1.0, yaw_idle[i] or 1.0)
             for k, wv in enumerate(win):
                 j = i + k - 1
                 if 0 <= j < T:
-                    emph_brow[j] = max(emph_brow[j], 0.32*g*wv)
-                    head[j, 0] += -math.radians(1.5)*g*wv*NOD   # slight chin-down nod (pitch), softened
-                    head[j, 1] +=  math.radians(0.8)*g*wv*NOD*math.sin(i)  # tiny yaw variety
+                    emph_brow[j]   = max(emph_brow[j], 0.32*g*wv)
+                    emph_pitch[j] += -math.radians(1.5)*g*wv*NOD          # chin-down nod
+                    emph_yaw[j]   +=  math.radians(0.6)*g*wv*NOD*ydir     # coherent micro-yaw
             last = i
+
+head[:, 0] = IDLE*idle_gain*(pitch_idle + breath) + emph_pitch + IDLE*sacc_pitch
+head[:, 1] = IDLE*idle_gain*yaw_idle + emph_yaw + IDLE*sacc_yaw
+head[:, 2] = IDLE*idle_gain*roll_idle
+head[:, 0] = np.clip(head[:, 0], -3.0*D2R, 3.0*D2R)   # safety envelope so layers never stack cartoonish
+head[:, 1] = np.clip(head[:, 1], -3.5*D2R, 3.5*D2R)
+head[:, 2] = np.clip(head[:, 2], -2.0*D2R, 2.0*D2R)
 
 # ---- compose channels (clip 0..1) ------------------------------------------------
 def C(x): return list(np.clip(x, 0.0, 1.0).astype(float))
@@ -121,8 +164,9 @@ ch = {
     "browInnerUp":   C(browInner),
     "browOuterUpLeft":  C(browOuter),
     "browOuterUpRight": C(browOuter),
-    "cheekSquintLeft":  C(np.full(T, M["cheek"])),
-    "cheekSquintRight": C(np.full(T, M["cheek"])),
+    # faint breathing-synced shimmer so the face isn't a frozen mask (tiny — a light garnish)
+    "cheekSquintLeft":  C(np.full(T, M["cheek"]) + 0.02*IDLE*(0.5+0.5*np.sin(breath_phase))),
+    "cheekSquintRight": C(np.full(T, M["cheek"]) + 0.02*IDLE*(0.5+0.5*np.sin(breath_phase))),
     "eyeSquintLeft":  C(np.full(T, M["squint"])),
     "eyeSquintRight": C(np.full(T, M["squint"])),
     "eyeWideLeft":  C(np.full(T, M["eyeWide"])),

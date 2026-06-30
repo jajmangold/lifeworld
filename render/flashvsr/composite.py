@@ -19,6 +19,12 @@ ch_probe = cv2.VideoCapture(head)
 hw = int(ch_probe.get(cv2.CAP_PROP_FRAME_WIDTH))
 hh = int(ch_probe.get(cv2.CAP_PROP_FRAME_HEIGHT))
 ch_probe.release()
+# head_up may be rendered at a higher scale than the 2x canvas (ULTRA=4x). Downscale it onto the canvas
+# (supersampling -> sharper face). HEAD_SCALE = head_up's native scale; the loop resizes hf to (hw,hh).
+HEAD_SCALE = int(os.environ.get("HEAD_SCALE", "2"))
+if HEAD_SCALE != scale:
+    f_ds = scale / float(HEAD_SCALE)
+    hw, hh = int(round(hw * f_ds)), int(round(hh * f_ds))
 px = bx*scale + (bw*scale - hw)//2
 py = by*scale + (bh*scale - hh)//2
 print(f"[cmp] canvas {W2}x{H2}; head {hw}x{hh} at ({px},{py})", flush=True)
