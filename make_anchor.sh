@@ -153,12 +153,11 @@ else
     # matte from THIS segment's render frame dir (clip factory: $ADIR is per-segment)
     $RTX "docker exec sampl bash -lc 'cd /work && python3 export_alpha_matte.py output/$ADIR output/matte_${NAME}'" 2>&1 | grep -aE 'MATTE_OK|Error'
     $RTX "rm -rf $WAN/myinput/matte_${NAME}; cp -r $SAMPL/output/matte_${NAME} $WAN/myinput/"
-    # ensure the RESIDENT flashvsr-server is up + model loaded (premium upscales the head crop via it,
-    # so no per-call model reload and no 2nd model copy fighting the resident one for VRAM).
-    $RTX "curl -sf -m3 http://localhost:8801/health 2>/dev/null | grep -q '\"ok\"' || docker start flashvsr-server >/dev/null 2>&1; for i in \$(seq 1 40); do curl -sf -m3 http://localhost:8801/health 2>/dev/null | grep -q '\"ok\"' && break; sleep 3; done"
-    LK premium 204   # serialize our submits; the server also serializes internally (single GPU)
+    # wait for the resident FlashVSR queue coordinator (:8800) to have >=1 ready worker.
+    $RTX "for i in \$(seq 1 40); do curl -sf -m3 http://localhost:8800/health 2>/dev/null | grep -q true && break; sleep 3; done"
+    # NO premium flock: the queue coordinator load-balances concurrent submits across its workers, so
+    # multiple factory segments upscale on DIFFERENT GPUs in parallel (premium is no longer the 1-GPU bottleneck).
     $RTX "ULTRA=${ULTRA:-0} bash $WAN/flashvsr_face.sh ${NAME}" 2>&1 | grep -aE 'FLASHVSR_OK|Error|Traceback' | tail -3
-    UNLK premium 204
     rm -f output/${NAME}_talk.mp4   # muse wrote it as root; scp can't overwrite, only the josh-owned dir lets us unlink
     scp -q josh@rtx0:$WAN/outputs/flashvsr/wan2gp_face_fast_${NAME}_2x.mp4 output/${NAME}_talk.mp4
     OTSW=860   # OTS panels at 2x for the 1440p canvas
