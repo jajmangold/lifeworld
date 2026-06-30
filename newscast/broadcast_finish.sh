@@ -22,8 +22,7 @@ FF="[0:v][1:v]overlay=0:H-92[a];\
 [a][2:v]overlay=x='250 - mod(t*$SPEED\,$TW)':y=H-92[b];\
 [b][3:v]overlay=0:H-92[c];\
 [c][4:v]overlay=x=W-overlay_w-34:y=34[d];\
-[d][5:v]overlay=x='if(lt(t,1),-$LTW, if(lt(t,1.6), -$LTW+($LTW+70)*(t-1)/0.6, if(gt(t,$OUTTRO), 70-($LTW+70)*(t-$OUTTRO)/1.6, 70)))':y=H-92-overlay_h-26[e];\
-[e]drawtext=text='$CLOCK':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:fontsize=40:fontcolor=white:x=W-200:y=H-66[v]"
+[d][5:v]overlay=x='if(lt(t,1),-$LTW, if(lt(t,1.6), -$LTW+($LTW+70)*(t-1)/0.6, if(gt(t,$OUTTRO), 70-($LTW+70)*(t-$OUTTRO)/1.6, 70)))':y=H-92-overlay_h-26[v]"
 
 if [ -n "$MUSIC" ] && [ -f "$MUSIC" ]; then
   ffmpeg -y -i "$IN" -i "$G/gfx_ticker_bg.png" -i "$G/gfx_ticker_text.png" -i "$G/gfx_ticker_fg.png" \

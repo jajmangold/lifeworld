@@ -33,7 +33,9 @@ cx = float(np.median(arr[:, 0] + arr[:, 2] / 2))
 cy = float(np.median(arr[:, 1] + arr[:, 3] / 2))
 msz = float(np.median(np.maximum(arr[:, 2], arr[:, 3])))
 side = msz * 2.2
-side = min(side, H * 0.92)               # hard cap: never approach full-frame (OOM guard)
+import os as _os
+side = min(side, H * 0.92, float(_os.environ.get("MAX_BOX", "464")))   # cap so 2x region fits 12GB
+# (464 box -> 928 region fits; 512 -> 1024 OOMs FlashVSR on a 3060). MCU framing makes the head big.
 half = side / 2
 bx0 = max(0, int(cx - half));        by0 = max(0, int(cy - half * 1.05))
 bx1 = min(W, int(cx + half));        by1 = min(H, int(cy + half * 1.15))
