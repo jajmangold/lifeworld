@@ -18,7 +18,7 @@ SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"
 
-MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6
+MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6
 while [ $# -gt 0 ]; do case "$1" in
   --audio) AUDIO=$2; shift 2;; --out) OUT=$2; shift 2;; --mood) MOOD=$2; shift 2;;
   --brow) BROW=$2; shift 2;; --nod) NOD=$2; shift 2;; --browbase) BROWBASE=$2; shift 2;;
@@ -27,6 +27,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --baked) BAKED=1; shift;;
   --bakedtex) BAKEDTEX=$2; shift 2;;
   --headtex) HEADTEX=$2; shift 2;;   # improved skin/hair base texture (swap still runs). DEFAULT anchorM_klein_head.png; pass --headtex "" to disable
+  --screen) SCREEN=$2; shift 2;;     # broadcast mode: 3D video-wall image (reframe MCU + anchor left + screen right)
   --restore) RESTORE=$2; shift 2;;   # GFPGAN restore strength 0..1 (default 0.6; 1.0=waxy, 0=muse-soft)
   --ots) OTS=$2; shift 2;; *) echo "unknown arg: $1"; exit 1;; esac; done
 [ -z "$AUDIO" ] && { echo "need --audio"; exit 1; }
@@ -60,6 +61,11 @@ elif [ -n "$HEADTEX" ]; then
   scp -q viverse_avatar/$HEADTEX josh@rtx0:$SAMPL/
   BENV="BAKED_HEAD_TEX=/work/$HEADTEX "
   log "headtex mode: $HEADTEX (improved skin/hair base; per-frame swap still runs)"
+fi
+if [ -n "$SCREEN" ]; then
+  SB=$(basename "$SCREEN"); scp -q "$SCREEN" josh@rtx0:$SAMPL/"$SB"
+  BENV="${BENV}NEWS_SCREEN=/work/$SB "
+  log "broadcast mode: 3D video wall $SB (reframe MCU + anchor left)"
 fi
 $RTX "docker exec sampl bash -lc 'cd /work && rm -f output/anchor_anim/f*.png && ${BENV}CUDA_VISIBLE_DEVICES=0 /opt/blender/blender --background --python render_anchor_anim.py -- --arkit /work/${NAME}.perf.json > /work/output/${NAME}_render.log 2>&1; echo DONE_RC=\$? >> /work/output/${NAME}_render.log'"
 # premultiplied-over composite (clean silhouette edges) then encode

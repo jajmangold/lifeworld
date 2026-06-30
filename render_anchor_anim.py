@@ -190,8 +190,49 @@ cam=bpy.data.objects.new("cam",cd);bpy.context.collection.objects.link(cam)
 cam.location=(cx,mx.y+H*0.62,aimz);cam.rotation_euler=(math.radians(90),0,math.radians(180))
 sc.camera=cam
 
+# ---- BROADCAST MODE (env NEWS_SCREEN=<image>): reframe to MCU + anchor on left third + 3D video wall ----
+import os as _os
+_SCREEN_IMG=_os.environ.get("NEWS_SCREEN")
+_char_meshes=[o for o in bpy.data.objects if o.type=="MESH"]   # avatar meshes (before the screen is added)
+_screen=None
+if _SCREEN_IMG:
+    def _ef(k,d): return float(_os.environ.get(k,d))
+    # reframe: medium close-up + horizontal lens shift to push the anchor to the left third
+    cd.lens=_ef("NEWS_LENS","92")
+    cd.shift_x=_ef("NEWS_SHIFTX","0.33")
+    cam.location=(cx, mx.y+H*_ef("NEWS_DIST","0.42"), topz-H*_ef("NEWS_AIM","0.09"))
+    # 3D video wall: emissive plane standing in the set, angled toward camera, right of + behind the anchor.
+    # NDC mapping (this rig): screen NDC x ~= 0.17 - 1.30*SX, NDC y centers ~0.5 at SZ~0.14. SX<0 -> frame right.
+    bpy.ops.mesh.primitive_plane_add(size=1.0)
+    _screen=bpy.context.active_object; _screen.name="news_screen"
+    _screen.rotation_euler=(math.radians(90),0,math.radians(_ef("NEWS_YAW","14")))
+    _screen.scale=(_ef("NEWS_W","0.50"), _ef("NEWS_H","0.28"), 1.0)
+    _screen.location=(cx+_ef("NEWS_SX","-0.45"), cy+_ef("NEWS_SY","0.05"), topz-H*_ef("NEWS_SZ","0.08"))
+    _sm=bpy.data.materials.new("screenmat");_sm.use_nodes=True;_smt=_sm.node_tree;_smt.nodes.clear()
+    _so=_smt.nodes.new("ShaderNodeOutputMaterial");_se=_smt.nodes.new("ShaderNodeEmission")
+    _st=_smt.nodes.new("ShaderNodeTexImage");_st.image=bpy.data.images.load(_SCREEN_IMG)
+    _se.inputs["Strength"].default_value=_ef("NEWS_SCREEN_STR","2.4")
+    _smt.links.new(_st.outputs["Color"],_se.inputs["Color"]);_smt.links.new(_se.outputs[0],_so.inputs["Surface"])
+    _screen.data.materials.append(_sm)
+    from bpy_extras.object_utils import world_to_camera_view as _w2c
+    bpy.context.view_layer.update()
+    _c=_w2c(sc,cam,_screen.matrix_world.translation)
+    print("BROADCAST screen at",tuple(round(v,2) for v in _screen.location),"shift_x",cd.shift_x,
+          "| NDC x=%.3f y=%.3f depth=%.2f"%(_c.x,_c.y,_c.z),flush=True)
+
 # ---- render settings ----
-sc.render.engine="BLENDER_EEVEE_NEXT";sc.eevee.taa_render_samples=32
+sc.render.engine="BLENDER_EEVEE_NEXT"
+# broadcast MCU magnifies the HASHED-material TAA dither (checker on the white shirt) -> more samples.
+sc.eevee.taa_render_samples=int(os.environ.get("NEWS_SAMPLES", "96" if os.environ.get("NEWS_SCREEN") else "32"))
+# opaque face/body should cast OPAQUE (not alpha-tested/dithered) shadows — the HASHED materials
+# otherwise throw a stochastic checker into the neck/collar shadow on the white shirt. (Camera-side
+# alpha cutout is untouched, so no black shoulder patches.)
+for _o in bpy.data.objects:
+    if _o.type=="MESH" and ("head_Opaque" in _o.name or "body_Opaque" in _o.name):
+        for _sl in _o.material_slots:
+            if _sl.material:
+                try: _sl.material.use_transparent_shadow=False
+                except Exception: pass
 sc.render.resolution_x=1280;sc.render.resolution_y=720
 sc.render.image_settings.file_format="PNG"
 sc.view_settings.view_transform="AgX";sc.view_settings.exposure=EXPO
@@ -202,7 +243,9 @@ sc.view_settings.view_transform="AgX";sc.view_settings.exposure=EXPO
 # the character either way.
 sc.render.image_settings.color_mode="RGB"
 sc.render.film_transparent=False
-_meshes=[o for o in bpy.data.objects if o.type=="MESH"]
+# In broadcast mode hide ONLY the avatar (the news_screen stays so it's baked into the static bg plate
+# AND keeps lighting the anchor in the transparent pass). Otherwise hide all meshes (original behaviour).
+_meshes=_char_meshes if _SCREEN_IMG else [o for o in bpy.data.objects if o.type=="MESH"]
 _vis={o:o.hide_render for o in _meshes}
 for o in _meshes: o.hide_render=True
 sc.frame_set(1); sc.render.filepath=OUT+"bg"; bpy.ops.render.render(write_still=True)
