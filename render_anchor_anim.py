@@ -223,7 +223,7 @@ if _SCREEN_IMG:
 # ---- render settings ----
 sc.render.engine="BLENDER_EEVEE_NEXT"
 # broadcast MCU magnifies the HASHED-material TAA dither (checker on the white shirt) -> more samples.
-sc.eevee.taa_render_samples=int(os.environ.get("NEWS_SAMPLES", "96" if os.environ.get("NEWS_SCREEN") else "32"))
+sc.eevee.taa_render_samples=int(os.environ.get("NEWS_SAMPLES", "64" if os.environ.get("NEWS_SCREEN") else "32"))
 # opaque face/body should cast OPAQUE (not alpha-tested/dithered) shadows — the HASHED materials
 # otherwise throw a stochastic checker into the neck/collar shadow on the white shirt. (Camera-side
 # alpha cutout is untouched, so no black shoulder patches.)
