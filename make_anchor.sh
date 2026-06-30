@@ -98,7 +98,9 @@ else
     MUSE_IN=${NAME}_swap
   fi
   # 16k audio for muse
-  ffmpeg -y -i "$AUDIO" -ar 16000 -ac 1 output/${NAME}_16k.wav 2>/dev/null
+  # noise-gate the MuseTalk audio: hard-silence the pauses so the mouth doesn't jitter on
+  # low-level breath/TTS-floor (loudnorm raises that floor). Gated pauses -> neutral closed mouth.
+  ffmpeg -y -i "$AUDIO" -af "highpass=f=70,agate=threshold=0.045:ratio=12:attack=6:release=180:range=0.0,agate=threshold=0.02:ratio=6:attack=10:release=250:range=0.0" -ar 16000 -ac 1 output/${NAME}_16k.wav 2>/dev/null
   log "MuseTalk (last)..."
   rm -f output/muse_jobs/${NAME}.done output/muse_jobs/${NAME}.err
   printf '{"video":"/io/%s.mp4","audio":"/io/%s_16k.wav","out":"/io/%s_talk.mp4"}\n' "$MUSE_IN" "$NAME" "$NAME" > output/muse_jobs/${NAME}.json

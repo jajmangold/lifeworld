@@ -33,7 +33,8 @@ for w in words:
     else: lines.append(cur); cur = w
 lines.append(cur); y = 290
 for ln in lines: d.text((90, y), ln, font=hf, fill=(255, 255, 255, 255)); y += 128
-d.text((92, y + 12), "Global coalition unveils new encryption standard", font=F(46, False), fill=(235, 180, 190, 255))
+sub = pkg.get("subhead") or pkg.get("screen_label", "")
+d.text((92, y + 12), sub, font=F(46, False), fill=(235, 180, 190, 255))
 d.rectangle((92, y + 92, 652, y + 100), fill=RED + (255,))
 im.convert("RGB").save(B + "/output/screen_graphic.png")
 cv2.imwrite(B + "/output/screen_graphic_f.png", cv2.flip(cv2.imread(B + "/output/screen_graphic.png"), 1))

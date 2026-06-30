@@ -10,7 +10,8 @@ usr = (f"Write a single-anchor broadcast read, ~30 seconds spoken (~80-90 words)
        "Structure: 'Good evening, I'm <anchor name>.' then the lead story, then a brief sign-off ending '...NNS.' "
        "Performable: natural cadence, a comma/pause or two, no stage directions. "
        "Return STRICT JSON only with keys: anchor_name (first last), kicker (1-2 words ALL CAPS e.g. BREAKING/TECH/WORLD), "
-       "headline (<=6 words Title Case), screen_label (2-3 words), ticker (array of 6 short unrelated one-line headlines), "
+       "headline (<=6 words Title Case), screen_label (2-3 words), subhead (one short sentence <=9 words summarizing the story for the on-screen graphic), "
+       "ticker (array of 6 short unrelated one-line headlines), "
        "script (the spoken read as one string).")
 body = json.dumps({"model": "deepseek-v4-flash",
                    "messages": [{"role": "system", "content": sysmsg}, {"role": "user", "content": usr}],
