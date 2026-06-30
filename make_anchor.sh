@@ -107,6 +107,20 @@ else
   while [ ! -f output/muse_jobs/${NAME}.done ] && [ ! -f output/muse_jobs/${NAME}.err ]; do sleep 5; done
   [ -f output/muse_jobs/${NAME}.err ] && { echo "MUSE ERR: $(cat output/muse_jobs/${NAME}.err)"; exit 1; }
   log "muse done: $(cat output/muse_jobs/${NAME}.done)"
+  # MOUTH-FREEZE: MuseTalk animates the lips even on true silence -> jitter in quiet moments. Replace the
+  # mouth with the neutral render pose (from the swap, same head motion) on silent frames. Needs the swap
+  # + faces.json (swap mode only) + the gated muse audio.
+  if [ "$BAKED" != 1 ] && [ -f output/${NAME}_swap.mp4 ] && [ -f output/${NAME}.faces.json ]; then
+    log "mouth-freeze (silence -> neutral mouth)..."
+    docker run --rm -v "$BOT":/io -w /io mp-extract:1.0 python3 newscast/mouth_freeze.py \
+      /io/output/${NAME}_talk.mp4 /io/output/${NAME}_swap.mp4 /io/output/${NAME}.faces.json \
+      /io/output/${NAME}_16k.wav /io/output/${NAME}_mf.mp4 2>&1 | grep -aE 'MOUTH_FREEZE_OK|Error'
+    if [ -f output/${NAME}_mf.mp4 ]; then
+      ffmpeg -y -i output/${NAME}_mf.mp4 -i output/${NAME}_talk.mp4 -map 0:v -map 1:a? \
+        -c:v libx264 -pix_fmt yuv420p -crf 17 -c:a aac -shortest output/${NAME}_mfav.mp4 2>/dev/null
+      rm -f output/${NAME}_talk.mp4 output/${NAME}_mf.mp4; mv output/${NAME}_mfav.mp4 output/${NAME}_talk.mp4
+    fi
+  fi
   # FINAL FACE FINISH: --premium => FlashVSR-face 2x diffusion upscale on rtx0 (1440p, replaces GFPGAN).
   # else => GFPGAN-keepeyes restore reusing the swap's saved faces (720p, fast).
   if [ "$PREMIUM" = 1 ]; then
