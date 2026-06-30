@@ -97,6 +97,7 @@ else
     WAN=/mnt/datadisk/containers/wan2gp
     scp -q output/${NAME}_talk.mp4 josh@rtx0:$WAN/myinput/${NAME}.mp4
     $RTX "bash $WAN/flashvsr_face.sh ${NAME}" 2>&1 | grep -aE 'FLASHVSR_OK|Error|Traceback' | tail -3
+    rm -f output/${NAME}_talk.mp4   # muse wrote it as root; scp can't overwrite, only the josh-owned dir lets us unlink
     scp -q josh@rtx0:$WAN/outputs/flashvsr/wan2gp_face_fast_${NAME}_2x.mp4 output/${NAME}_talk.mp4
     OTSW=860   # OTS panels at 2x for the 1440p canvas
     log "flashvsr done -> $(ffprobe -v error -show_entries stream=width,height -of csv=p=0:s=x output/${NAME}_talk.mp4 2>/dev/null | head -1)"
