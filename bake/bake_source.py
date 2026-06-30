@@ -18,7 +18,7 @@ print("HEAD bounds z", round(mn.z,3), round(mx.z,3), "H", round(H,3), "y", round
 # EVEN lighting: bright uniform world (albedo-ish), no directional shadows
 world = bpy.data.worlds.new("W"); bpy.context.scene.world = world
 world.use_nodes = True; bg = world.node_tree.nodes.get("Background")
-bg.inputs["Color"].default_value = (1,1,1,1); bg.inputs["Strength"].default_value = 1.6
+bg.inputs["Color"].default_value = (1,1,1,1); bg.inputs["Strength"].default_value = 0.85
 
 # Camera: front (+Y), tight on the face
 cam_d = bpy.data.cameras.new("c"); cam_d.lens = 55

@@ -55,7 +55,7 @@ if [ "$BAKED" = 1 ]; then
   log "baked-texture mode: $BAKEDTEX (identity baked into render; swap will be skipped)"
 fi
 $RTX "docker exec sampl bash -lc 'cd /work && rm -f output/anchor_anim/f*.png && ${BENV}CUDA_VISIBLE_DEVICES=0 /opt/blender/blender --background --python render_anchor_anim.py -- --arkit /work/${NAME}.perf.json > /work/output/${NAME}_render.log 2>&1; echo DONE_RC=\$? >> /work/output/${NAME}_render.log'"
-$RTX "docker exec sampl bash -lc 'cd /work/output/anchor_anim && ffmpeg -y -framerate 25 -i f%04d.png -c:v libx264 -pix_fmt yuv420p -crf 18 /work/output/${NAME}_silent.mp4 2>&1 | tail -1'" >/dev/null
+$RTX "docker exec sampl bash -lc 'cd /work/output/anchor_anim && ffmpeg -y -framerate 25 -i f%04d.png -loop 1 -i bg.png -filter_complex \"[0:v]unpremultiply=inplace=1[c];[1:v][c]overlay=shortest=1,format=yuv420p\" -c:v libx264 -crf 18 /work/output/${NAME}_silent.mp4 2>&1 | tail -1'" >/dev/null
 scp -q josh@rtx0:$SAMPL/output/${NAME}_silent.mp4 output/${NAME}_silent.mp4
 log "render done -> output/${NAME}_silent.mp4"
 

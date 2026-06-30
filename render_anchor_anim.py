@@ -12,6 +12,7 @@ ARKIT   = args("--arkit", "/work/anchor.arkit.json")
 ENVSTR  = argf("--envstr", 0.75)   # newsroom env strength (was 1.0 = too bright)
 KEY     = argf("--key", 130.0)
 FILL    = argf("--fill", 45.0)
+RIM     = argf("--rim", 90.0)       # back/hair rim light to separate head from dark bg
 EXPO    = argf("--expo", -0.9)     # exposure stops (was -0.5)
 GLB     = "/work/avatar.glb"
 PANO    = "/work/newsroom_pano.png"
@@ -76,6 +77,12 @@ if _baked:
                 _img = bpy.data.images.load(_baked); _img.colorspace_settings.name = "sRGB"
                 _tn.image = _img
                 print("BAKED head texture applied:", _baked)
+# hide the head_Transparent "fuzz" shell (thin transparent hairline layer) that reads as a dark rim
+if os.environ.get("HIDE_HEAD_FUZZ"):
+    _ht = bpy.data.objects.get("head_Transparent_Material_Meshes_Mesh")
+    if _ht:
+        _ht.hide_render = True
+        print("hid head_Transparent fuzz shell")
 
 # ---- arms down ----
 bpy.context.view_layer.objects.active = arm
@@ -170,6 +177,9 @@ def area(name,loc,energy,size):
     o.rotation_euler=(Vector((cx,cy,topz-H*0.10))-Vector(loc)).normalized().to_track_quat('-Z','Y').to_euler()
 area("key",(cx-0.6,cy+1.6,topz+0.2),KEY,1.4)
 area("fill",(cx+0.7,cy+1.4,topz-0.1),FILL,1.8)
+# rim/hair light BEHIND + above the head -> lifts the silhouette so the hair edge separates from the
+# dark background (kills the dark contour rim) instead of falling off to a dark outline.
+area("rim",(cx-0.3,cy-1.5,topz+0.7),RIM,1.0)
 
 # ---- camera ----
 cd=bpy.data.cameras.new("cam");cd.lens=LENS
@@ -179,10 +189,25 @@ sc.camera=cam
 
 # ---- render settings ----
 sc.render.engine="BLENDER_EEVEE_NEXT";sc.eevee.taa_render_samples=32
-sc.render.film_transparent=False
 sc.render.resolution_x=1280;sc.render.resolution_y=720
 sc.render.image_settings.file_format="PNG"
 sc.view_settings.view_transform="AgX";sc.view_settings.exposure=EXPO
+
+# Render the env BACKGROUND once (character hidden) -> bg.png. The character is then rendered on
+# transparent and composited over bg in post (clean straight-alpha edges) instead of rendered directly
+# over the env, which left a dark AA fringe at the head silhouette. The world still lights/reflects on
+# the character either way.
+sc.render.image_settings.color_mode="RGB"
+sc.render.film_transparent=False
+_meshes=[o for o in bpy.data.objects if o.type=="MESH"]
+_vis={o:o.hide_render for o in _meshes}
+for o in _meshes: o.hide_render=True
+sc.frame_set(1); sc.render.filepath=OUT+"bg"; bpy.ops.render.render(write_still=True)
+for o in _meshes: o.hide_render=_vis[o]
+print("rendered env background -> bg.png")
+
+sc.render.film_transparent=True
+sc.render.image_settings.color_mode="RGBA"
 sc.render.filepath=OUT+"f"
 bpy.ops.render.render(animation=True)
 print("WROTE frames to",OUT)
