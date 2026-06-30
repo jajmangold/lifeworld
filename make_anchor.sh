@@ -149,11 +149,14 @@ else
     # head matte from the render alpha frames -> confine FlashVSR sharpening inside the silhouette
     # (no diffusion edge-ringing halo). composite.py auto-uses myinput/matte_<name>/ if present.
     scp -q render/export_alpha_matte.py josh@rtx0:$SAMPL/
-    scp -q render/flashvsr/composite.py render/flashvsr/head_up.py render/flashvsr/detect_crop.py render/flashvsr/flashvsr_face.sh josh@rtx0:$WAN/
+    scp -q render/flashvsr/composite.py render/flashvsr/detect_crop.py render/flashvsr/flashvsr_face.sh josh@rtx0:$WAN/
     # matte from THIS segment's render frame dir (clip factory: $ADIR is per-segment)
     $RTX "docker exec sampl bash -lc 'cd /work && python3 export_alpha_matte.py output/$ADIR output/matte_${NAME}'" 2>&1 | grep -aE 'MATTE_OK|Error'
     $RTX "rm -rf $WAN/myinput/matte_${NAME}; cp -r $SAMPL/output/matte_${NAME} $WAN/myinput/"
-    LK premium 204   # serialize rtx0 GPU1 (FlashVSR) across segments — overlaps with another seg's render on GPU0
+    # ensure the RESIDENT flashvsr-server is up + model loaded (premium upscales the head crop via it,
+    # so no per-call model reload and no 2nd model copy fighting the resident one for VRAM).
+    $RTX "curl -sf -m3 http://localhost:8801/health 2>/dev/null | grep -q '\"ok\"' || docker start flashvsr-server >/dev/null 2>&1; for i in \$(seq 1 40); do curl -sf -m3 http://localhost:8801/health 2>/dev/null | grep -q '\"ok\"' && break; sleep 3; done"
+    LK premium 204   # serialize our submits; the server also serializes internally (single GPU)
     $RTX "ULTRA=${ULTRA:-0} bash $WAN/flashvsr_face.sh ${NAME}" 2>&1 | grep -aE 'FLASHVSR_OK|Error|Traceback' | tail -3
     UNLK premium 204
     rm -f output/${NAME}_talk.mp4   # muse wrote it as root; scp can't overwrite, only the josh-owned dir lets us unlink
