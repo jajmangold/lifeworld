@@ -18,7 +18,7 @@ SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"
 
-MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; OTS=""; AUDIO=""; OUT=""
+MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6
 while [ $# -gt 0 ]; do case "$1" in
   --audio) AUDIO=$2; shift 2;; --out) OUT=$2; shift 2;; --mood) MOOD=$2; shift 2;;
   --brow) BROW=$2; shift 2;; --nod) NOD=$2; shift 2;; --browbase) BROWBASE=$2; shift 2;;
@@ -26,6 +26,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --premium) PREMIUM=1; shift;;
   --baked) BAKED=1; shift;;
   --bakedtex) BAKEDTEX=$2; shift 2;;
+  --restore) RESTORE=$2; shift 2;;   # GFPGAN restore strength 0..1 (default 0.6; 1.0=waxy, 0=muse-soft)
   --ots) OTS=$2; shift 2;; *) echo "unknown arg: $1"; exit 1;; esac; done
 [ -z "$AUDIO" ] && { echo "need --audio"; exit 1; }
 [ -z "$OUT" ] && { echo "need --out"; exit 1; }
@@ -111,7 +112,7 @@ else
       docker exec swap-server chmod 777 /o/swap_jobs 2>/dev/null || true; }
     FACESARG=""; [ -f output/${NAME}.faces.json ] && FACESARG=",\"faces\":\"/o/${NAME}.faces.json\""
     rm -f output/swap_jobs/${NAME}r.done output/swap_jobs/${NAME}r.err
-    printf '{"mode":"restore","video":"/o/%s_talk.mp4","out":"/o/%s_sharp.mp4","keepeyes":true%s}\n' "$NAME" "$NAME" "$FACESARG" > output/swap_jobs/${NAME}r.json
+    printf '{"mode":"restore","video":"/o/%s_talk.mp4","out":"/o/%s_sharp.mp4","keepeyes":true,"strength":%s%s}\n' "$NAME" "$NAME" "$RESTORE" "$FACESARG" > output/swap_jobs/${NAME}r.json
     while [ ! -f output/swap_jobs/${NAME}r.done ] && [ ! -f output/swap_jobs/${NAME}r.err ]; do sleep 3; done
     [ -f output/swap_jobs/${NAME}r.err ] && { echo "RESTORE ERR: $(cat output/swap_jobs/${NAME}r.err)"; exit 1; }
     # restore output is video-only mp4v; re-mux the audio from the muse output, back to ${NAME}_talk.mp4

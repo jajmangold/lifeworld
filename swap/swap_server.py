@@ -16,7 +16,7 @@ swapper = insightface.model_zoo.get_model('/s/models/inswapper_128.onnx', provid
 gfp = ort.InferenceSession('/s/models/gfpgan-1024.onnx', providers=PROV)
 
 
-def enhance(frame, bbox, kps, keepeyes=True):
+def enhance(frame, bbox, kps, keepeyes=True, strength=1.0):
     x1, y1, x2, y2 = [int(v) for v in bbox]; mg = int(0.25 * (x2 - x1))
     x1, y1 = max(0, x1 - mg), max(0, y1 - mg)
     x2, y2 = min(frame.shape[1], x2 + mg), min(frame.shape[0], y2 + mg)
@@ -28,6 +28,10 @@ def enhance(frame, bbox, kps, keepeyes=True):
     out = gfp.run(None, {'input': inp})[0][0]
     out = np.clip(out * 0.5 + 0.5, 0, 1).transpose(1, 2, 0)
     out = cv2.resize(cv2.cvtColor((out * 255).astype(np.uint8), cv2.COLOR_RGB2BGR), (w, h))
+    # partial-strength restore: blend GFPGAN toward the original crop so natural pores/skin survive
+    # (full strength = waxy/plastic). strength<1 keeps (1-strength) of the real skin.
+    if strength < 1.0:
+        out = (out.astype(np.float32) * strength + crop.astype(np.float32) * (1.0 - strength)).astype(np.uint8)
     mask = np.zeros((h, w), np.float32)
     cv2.ellipse(mask, (w // 2, h // 2), (int(w * 0.43), int(h * 0.47)), 0, 0, 360, 1, -1)
     if keepeyes and kps is not None:
@@ -44,9 +48,9 @@ def enhance(frame, bbox, kps, keepeyes=True):
     return frame
 
 
-def enhance_known(frame, bbox, kps, keepeyes=True):
+def enhance_known(frame, bbox, kps, keepeyes=True, strength=1.0):
     # GFPGAN restore using a KNOWN bbox/kps (no detection). bbox=[x1,y1,x2,y2], kps=2x2 eye points.
-    return enhance(frame, bbox, np.asarray(kps, np.float32) if kps is not None else None, keepeyes=keepeyes)
+    return enhance(frame, bbox, np.asarray(kps, np.float32) if kps is not None else None, keepeyes=keepeyes, strength=strength)
 
 
 def swap_video(src_path, tgt_path, out_path, keepeyes=True, do_enhance=True, save_faces=None):
@@ -77,7 +81,7 @@ def swap_video(src_path, tgt_path, out_path, keepeyes=True, do_enhance=True, sav
     return n, miss
 
 
-def restore_video(tgt_path, out_path, faces_path, keepeyes=True):
+def restore_video(tgt_path, out_path, faces_path, keepeyes=True, strength=1.0):
     # Final GFPGAN restore on a finished (post-MuseTalk) video. If faces_path is given, reuse the swap's
     # detected faces (no re-detection). Otherwise (e.g. baked-texture path, no swap) detect per frame.
     faces = json.load(open(faces_path)) if (faces_path and os.path.exists(faces_path)) else None
@@ -93,14 +97,14 @@ def restore_video(tgt_path, out_path, faces_path, keepeyes=True):
             f = faces[n] if n < len(faces) else None
             if f is not None:
                 bbox, kps = f
-                fr = enhance_known(fr, bbox, kps, keepeyes=keepeyes)
+                fr = enhance_known(fr, bbox, kps, keepeyes=keepeyes, strength=strength)
             else:
                 miss += 1
         else:
             dets = app.get(fr)
             if dets:
                 tf = max(dets, key=lambda d: d.bbox[2] - d.bbox[0])
-                fr = enhance(fr, tf.bbox, tf.kps, keepeyes=keepeyes)
+                fr = enhance(fr, tf.bbox, tf.kps, keepeyes=keepeyes, strength=strength)
             else:
                 miss += 1
         out.write(fr); n += 1
@@ -118,7 +122,7 @@ while True:
             spec = json.load(open(jf)); os.remove(jf)
             t0 = time.time()
             if spec.get("mode") == "restore":
-                n, miss = restore_video(spec["video"], spec["out"], spec.get("faces"), spec.get("keepeyes", True))
+                n, miss = restore_video(spec["video"], spec["out"], spec.get("faces"), spec.get("keepeyes", True), spec.get("strength", 1.0))
                 tag = "RESTORE"
             else:
                 n, miss = swap_video(spec["src"], spec["video"], spec["out"], spec.get("keepeyes", True),
