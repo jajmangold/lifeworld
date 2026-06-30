@@ -8,6 +8,7 @@
 #   --brow 1.4   --nod 1.0   --browbase 0.05   --seed 7
 #   --face anchorM.png        face-swap source (full mode; default anchorM.png)
 #   --fast                    viseme mouth, render-only (skip swap+MuseTalk) ~4min vs ~full
+#   --premium                 FlashVSR-face 2x diffusion upscale -> 1440p (rtx0, +~4min; replaces GFPGAN)
 #   --ots "img|LABEL|end; img2|LABEL2|end2"   over-the-shoulder panels (seconds = segment end times)
 set -e
 BOT=/srv/nvme-data/containers/projects/bot
@@ -15,11 +16,12 @@ SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"
 
-MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; OTS=""; AUDIO=""; OUT=""
+MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; OTS=""; AUDIO=""; OUT=""
 while [ $# -gt 0 ]; do case "$1" in
   --audio) AUDIO=$2; shift 2;; --out) OUT=$2; shift 2;; --mood) MOOD=$2; shift 2;;
   --brow) BROW=$2; shift 2;; --nod) NOD=$2; shift 2;; --browbase) BROWBASE=$2; shift 2;;
   --seed) SEED=$2; shift 2;; --face) FACE=$2; shift 2;; --fast) FAST=1; shift;;
+  --premium) PREMIUM=1; shift;;
   --ots) OTS=$2; shift 2;; *) echo "unknown arg: $1"; exit 1;; esac; done
 [ -z "$AUDIO" ] && { echo "need --audio"; exit 1; }
 [ -z "$OUT" ] && { echo "need --out"; exit 1; }
@@ -71,9 +73,17 @@ else
   while [ ! -f output/muse_jobs/${NAME}.done ] && [ ! -f output/muse_jobs/${NAME}.err ]; do sleep 5; done
   [ -f output/muse_jobs/${NAME}.err ] && { echo "MUSE ERR: $(cat output/muse_jobs/${NAME}.err)"; exit 1; }
   log "muse done: $(cat output/muse_jobs/${NAME}.done)"
-  # FINAL RESTORE: GFPGAN-keepeyes on the muse output, reusing the swap's saved faces (no re-detection).
-  # Sharpens the whole face INCLUDING the soft muse mouth; preserves blinks.
-  if [ -f output/${NAME}.faces.json ]; then
+  # FINAL FACE FINISH: --premium => FlashVSR-face 2x diffusion upscale on rtx0 (1440p, replaces GFPGAN).
+  # else => GFPGAN-keepeyes restore reusing the swap's saved faces (720p, fast).
+  if [ "$PREMIUM" = 1 ]; then
+    log "FlashVSR-face 2x premium upscale on rtx0 (~4min)..."
+    WAN=/mnt/datadisk/containers/wan2gp
+    scp -q output/${NAME}_talk.mp4 josh@rtx0:$WAN/myinput/${NAME}.mp4
+    $RTX "bash $WAN/flashvsr_face.sh ${NAME}" 2>&1 | grep -aE 'FLASHVSR_OK|Error|Traceback' | tail -3
+    scp -q josh@rtx0:$WAN/outputs/flashvsr/wan2gp_face_fast_${NAME}_2x.mp4 output/${NAME}_talk.mp4
+    OTSW=860   # OTS panels at 2x for the 1440p canvas
+    log "flashvsr done -> $(ffprobe -v error -show_entries stream=width,height -of csv=p=0:s=x output/${NAME}_talk.mp4 2>/dev/null | head -1)"
+  elif [ -f output/${NAME}.faces.json ]; then
     log "final GFPGAN restore (sharpen mouth, reuse faces)..."
     rm -f output/swap_jobs/${NAME}r.done output/swap_jobs/${NAME}r.err
     printf '{"mode":"restore","video":"/o/%s_talk.mp4","out":"/o/%s_sharp.mp4","faces":"/o/%s.faces.json","keepeyes":true}\n' "$NAME" "$NAME" "$NAME" > output/swap_jobs/${NAME}r.json
@@ -97,7 +107,7 @@ if [ -n "$OTS" ]; then
     seg=$(echo "$seg" | sed 's/^ *//;s/ *$//'); [ -z "$seg" ] && continue
     IMG=$(echo "$seg" | cut -d'|' -f1); LAB=$(echo "$seg" | cut -d'|' -f2); END=$(echo "$seg" | cut -d'|' -f3)
     P=output/${NAME}_ots_${i}.png
-    docker run --rm -v "$BOT":/b -w /b mp-extract:1.0 python3 newscast/ots_panel.py "/b/$IMG" "$LAB" "/b/$P" | grep -aE 'OTS_OK|Error'
+    docker run --rm -v "$BOT":/b -w /b mp-extract:1.0 python3 newscast/ots_panel.py "/b/$IMG" "$LAB" "/b/$P" --w "${OTSW:-430}" | grep -aE 'OTS_OK|Error'
     PANELARGS="$PANELARGS $P $END"; i=$((i+1))
   done
   log "compositing OTS..."
