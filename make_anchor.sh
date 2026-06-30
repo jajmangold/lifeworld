@@ -120,18 +120,24 @@ else
   UNLK muse 203
   [ -f output/muse_jobs/${NAME}.err ] && { echo "MUSE ERR: $(cat output/muse_jobs/${NAME}.err)"; exit 1; }
   log "muse done: $(cat output/muse_jobs/${NAME}.done)"
-  # MOUTH-FREEZE: MuseTalk animates the lips even on true silence -> jitter in quiet moments. Replace the
-  # mouth with the neutral render pose (from the swap, same head motion) on silent frames. Needs the swap
-  # + faces.json (swap mode only) + the gated muse audio.
-  if [ "$BAKED" != 1 ] && [ -f output/${NAME}_swap.mp4 ] && [ -f output/${NAME}.faces.json ]; then
-    log "mouth-freeze (silence -> neutral mouth)..."
-    docker run --rm -v "$BOT":/io -w /io mp-extract:1.0 python3 newscast/mouth_freeze.py \
-      /io/output/${NAME}_talk.mp4 /io/output/${NAME}_swap.mp4 /io/output/${NAME}.faces.json \
-      /io/output/${NAME}_16k.wav /io/output/${NAME}_mf.mp4 2>&1 | grep -aE 'MOUTH_FREEZE_OK|Error'
-    if [ -f output/${NAME}_mf.mp4 ]; then
-      ffmpeg -y -i output/${NAME}_mf.mp4 -i output/${NAME}_talk.mp4 -map 0:v -map 1:a? \
-        -c:v libx264 -pix_fmt yuv420p -crf 17 -c:a aac -shortest output/${NAME}_mfav.mp4 2>/dev/null
-      rm -f output/${NAME}_talk.mp4 output/${NAME}_mf.mp4; mv output/${NAME}_mfav.mp4 output/${NAME}_talk.mp4
+  # PAUSE-LIP SETTLE: MuseTalk animates the lips even on true silence -> jitter in quiet moments. Read
+  # per-frame DENSE lip landmarks (insightface 2d106 in swap-server), smooth the lip trajectory through
+  # each silent run, and warp the mouth into the settled shape (kept a touch open). Natural settle driven
+  # by the real shapes, no teeth smear. Works in swap AND baked mode (self-detects lips).
+  log "pause-lip settle (dense-lip warp)..."
+  cp newscast/lip_landmarks.py output/lip_landmarks.py
+  docker ps --format '{{.Names}}' | grep -q '^swap-server$' || { bash "$BOT/swap/run_swap.sh"; \
+    for i in $(seq 1 20); do docker logs --tail 5 swap-server 2>&1 | tr '\r' '\n' | grep -q SWAP_SERVER_READY && break; sleep 3; done; }
+  LK swap 202
+  docker exec swap-server python3 /o/lip_landmarks.py /o/${NAME}_talk.mp4 /o/${NAME}_lips.npy 2>&1 | grep -aE 'LIP_OK|Error' | tail -1
+  UNLK swap 202
+  if [ -f output/${NAME}_lips.npy ]; then
+    docker run --rm -v "$BOT":/io -w /io mp-extract:1.0 python3 newscast/mouth_settle.py \
+      /io/output/${NAME}_talk.mp4 /io/output/${NAME}_lips.npy /io/output/${NAME}_16k.wav /io/output/${NAME}_settle.mp4 2>&1 | grep -aE 'MOUTH_SETTLE_OK|Error'
+    if [ -f output/${NAME}_settle.mp4 ]; then
+      ffmpeg -y -i output/${NAME}_settle.mp4 -i output/${NAME}_talk.mp4 -map 0:v -map 1:a? \
+        -c:v libx264 -pix_fmt yuv420p -crf 17 -c:a aac -shortest output/${NAME}_setav.mp4 2>/dev/null
+      rm -f output/${NAME}_talk.mp4 output/${NAME}_settle.mp4; mv output/${NAME}_setav.mp4 output/${NAME}_talk.mp4
     fi
   fi
   # FINAL FACE FINISH: --premium => FlashVSR-face 2x diffusion upscale on rtx0 (1440p, replaces GFPGAN).

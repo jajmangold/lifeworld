@@ -26,6 +26,9 @@ STAGGER = float(sys.argv[sys.argv.index("--stagger")+1]) if "--stagger" in sys.a
 os.makedirs(FLOCK_DIR, exist_ok=True)
 for r in ("render", "premium", "swap", "muse"):
     open(os.path.join(FLOCK_DIR, r + ".lock"), "a").close()
+# clean slate: kill any stray FlashVSR head_up left on rtx0 GPU1 by a crashed/manual run — a leftover
+# squatting on GPU1 OOMs the next premium. Safe at factory start (no legit head_up should be running).
+subprocess.call(["ssh", "-o", "BatchMode=yes", "josh@rtx0", "pkill -9 -f head_up 2>/dev/null; true"])
 
 _lt = threading.Lock(); _next = [0.0]
 def staggered_start():

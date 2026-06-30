@@ -56,8 +56,8 @@ def warp_to(img, src_pts, dst_pts, mw, weight):
         ds = D[tri].astype(np.float32); ss = S[tri].astype(np.float32)
         r = cv2.boundingRect(ds)
         if r[2] <= 0 or r[3] <= 0: continue
-        dsl = ds - [r[0], r[1]]
-        M = cv2.getAffineTransform(ss, dsl)
+        dsl = (ds - np.array([r[0], r[1]], np.float32)).astype(np.float32)
+        M = cv2.getAffineTransform(ss.astype(np.float32), dsl)
         patch = cv2.warpAffine(img, M, (r[2], r[3]), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
         mask = np.zeros((r[3], r[2]), np.float32); cv2.fillConvexPoly(mask, dsl.astype(np.int32), 1.0)
         mask = cv2.GaussianBlur(mask, (0,0), 1.5)[:, :, None] * weight
@@ -84,6 +84,13 @@ for (s, e) in runs:
     for p in range(seg.shape[1]):
         for d in (0, 1):
             smooth[:, p, d] = np.convolve(np.pad(seg[:, p, d], int(3*sig), mode="edge"), k, "valid")
+    # keep the resting mouth a touch MORE OPEN (resting faces aren't fully sealed): expand the settled
+    # lip shape vertically about its centre by OPEN_BIAS.
+    OPEN = float(__import__("os").environ.get("OPEN_BIAS", "0.12"))
+    if OPEN:
+        for t in range(L):
+            cy0 = smooth[t][:, 1].mean()
+            smooth[t][:, 1] = cy0 + (smooth[t][:, 1] - cy0) * (1.0 + OPEN)
     for t in range(L):
         fi = s + t
         cur = seg[t]; tgt = smooth[t]
