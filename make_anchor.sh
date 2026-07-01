@@ -18,12 +18,13 @@ SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"
 
-MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall; BG=""; PANO_ENV=""; GLBFILE=""; KEEPEYES=true
+MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall; BG=""; PANO_ENV=""; GLBFILE=""; KEEPEYES=true; CHARFILE=""; ULTRA=0
 while [ $# -gt 0 ]; do case "$1" in
   --audio) AUDIO=$2; shift 2;; --out) OUT=$2; shift 2;; --mood) MOOD=$2; shift 2;;
   --brow) BROW=$2; shift 2;; --nod) NOD=$2; shift 2;; --browbase) BROWBASE=$2; shift 2;;
   --seed) SEED=$2; shift 2;; --face) FACE=$2; shift 2;; --fast) FAST=1; shift;;
   --premium) PREMIUM=1; shift;;
+  --ultra) PREMIUM=1; ULTRA=1; shift;;   # FlashVSR-face 4x ULTRA (vs premium 2x)
   --baked) BAKED=1; shift;;
   --bakedtex) BAKEDTEX=$2; shift 2;;
   --headtex) HEADTEX=$2; shift 2;;   # improved skin/hair base texture (swap still runs). DEFAULT anchorM_klein_head.png; pass --headtex "" to disable
@@ -33,6 +34,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --bg) BG=$2; shift 2;;             # composite background plate (flat photo) — replaces the studio bg.png (fallback; --pano is better)
   --pano) PANO_ENV=$2; shift 2;;     # field/outdoor equirectangular env pano: LIGHTS the character AND renders the bg (proper on-location look)
   --glb) GLBFILE=$2; shift 2;;       # swap the character mesh (e.g. a viverse reporter VRM/GLB) instead of the anchor
+  --character) CHARFILE=$2; shift 2;; # BlenderKit Rigify .blend -> render via render_character.py (viverse-free); swap still runs
   --keepeyes) KEEPEYES=$2; shift 2;; # keep the RENDER's eyes during face-swap (true, default). false => swap brings the source's eyes (fixes viverse dark-eye meshes)
   --ots) OTS=$2; shift 2;; *) echo "unknown arg: $1"; exit 1;; esac; done
 [ -z "$AUDIO" ] && { echo "need --audio"; exit 1; }
@@ -63,6 +65,12 @@ log "render on rtx0..."
 $RTX "test -f $SAMPL/avatar.glb" || scp -q viverse_avatar/avatar.glb josh@rtx0:$SAMPL/
 $RTX "test -f $SAMPL/newsroom_pano.png" || scp -q output/newsroom_pano.png josh@rtx0:$SAMPL/
 scp -q output/${NAME}.perf.json render_anchor_anim.py josh@rtx0:$SAMPL/
+CB=""
+if [ -n "$CHARFILE" ]; then          # BlenderKit character: stage the .blend + the generic renderer
+  CB="char_${NAME}.blend"; scp -q "$CHARFILE" josh@rtx0:$SAMPL/"$CB"; scp -q render/render_character.py josh@rtx0:$SAMPL/
+  HEADTEX=""                         # not applicable to a BlenderKit character
+  log "character mode: $(basename "$CHARFILE") -> render_character.py"
+fi
 BENV=""
 if [ "$BAKED" = 1 ]; then
   $RTX "test -f $SAMPL/$BAKEDTEX" || scp -q viverse_avatar/$BAKEDTEX josh@rtx0:$SAMPL/
@@ -106,7 +114,11 @@ for _v in NEWS_AIM NEWS_DIST NEWS_LENS NEWS_FSTOP NEWS_WALLROT NEWS_ENVSTR NEWS_
   eval "_val=\${$_v}"; [ -n "$_val" ] && BENV="${BENV}$_v=$_val "
 done
 LK render 201   # serialize rtx0 GPU0 across segments (released right after Blender exits)
-$RTX "docker exec sampl bash -lc 'cd /work && mkdir -p output/$ADIR && rm -f output/$ADIR/f*.png && ${BENV}ANCHOR_OUT=/work/output/$ADIR/ CUDA_VISIBLE_DEVICES=0 /opt/blender/blender --background --python render_anchor_anim.py -- --arkit /work/${NAME}.perf.json > /work/output/${NAME}_render.log 2>&1; echo DONE_RC=\$? >> /work/output/${NAME}_render.log'"
+if [ -n "$CHARFILE" ]; then          # BlenderKit Rigify character (render_character.py)
+  $RTX "docker exec sampl bash -lc 'cd /work && mkdir -p output/$ADIR && rm -f output/$ADIR/f*.png && ${BENV}NEWS_CAMSIDE=${NEWS_CAMSIDE:--1} ANCHOR_OUT=/work/output/$ADIR/ CUDA_VISIBLE_DEVICES=0 /opt/blender/blender -b --python render_character.py -- --blend /work/$CB --arkit /work/${NAME}.perf.json > /work/output/${NAME}_render.log 2>&1; echo DONE_RC=\$? >> /work/output/${NAME}_render.log'"
+else                                 # viverse avatar (render_anchor_anim.py)
+  $RTX "docker exec sampl bash -lc 'cd /work && mkdir -p output/$ADIR && rm -f output/$ADIR/f*.png && ${BENV}ANCHOR_OUT=/work/output/$ADIR/ CUDA_VISIBLE_DEVICES=0 /opt/blender/blender --background --python render_anchor_anim.py -- --arkit /work/${NAME}.perf.json > /work/output/${NAME}_render.log 2>&1; echo DONE_RC=\$? >> /work/output/${NAME}_render.log'"
+fi
 UNLK render 201
 # optional background plate (e.g. field backdrop for a reporter standup): overwrite the studio bg.png
 # with the given image, scaled to COVER the frame. Character stays lit by the studio HDRI (fine for a
