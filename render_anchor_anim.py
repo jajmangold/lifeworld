@@ -18,7 +18,16 @@ RIM     = argf("--rim", 0.0)        # back/hair rim light. 0 by default: the pre
                                     # if a specific dark bg needs hair separation.
 EXPO    = argf("--expo", -0.9)     # exposure stops (was -0.5)
 GLB     = "/work/avatar.glb"
-PANO    = "/work/newsroom_pano.png"
+# world environment (equirectangular): lights the character AND is rendered as the bg.png behind it, so
+# lighting + background come from ONE coherent world. Override with NEWS_PANO for a field/outdoor env
+# (e.g. a generated flood pano) instead of the newsroom studio — this is the RIGHT way to place a
+# reporter on location (lit by the scene), not compositing over a flat photo.
+PANO    = os.environ.get("NEWS_PANO", "/work/newsroom_pano.png")
+_FIELD  = bool(os.environ.get("NEWS_PANO"))   # field mode: let the env do the lighting (flat overcast)
+if _FIELD:                       # outdoor overcast standup: env light dominates; drop the warm studio
+    ENVSTR = float(os.environ.get("NEWS_ENVSTR", "1.25"))   # brighter flat ambient from the sky
+    KEY *= 0.35; FILL *= 0.55                               # cut the hot broadcast key so she matches the scene
+    WALLROT = float(os.environ.get("NEWS_WALLROT", str(WALLROT)))  # aim the pano's good side at the camera
 OUT     = os.environ.get("ANCHOR_OUT", "/work/output/anchor_anim/")  # per-segment frame dir (clip factory)
 if not OUT.endswith("/"): OUT += "/"
 os.makedirs(OUT, exist_ok=True)
@@ -206,6 +215,12 @@ if _MCU:
     cd.lens=_ef("NEWS_LENS","92")
     cd.shift_x=_ef("NEWS_SHIFTX", "0.33" if _SCREEN_IMG else "0.0")
     cam.location=(cx, mx.y+H*_ef("NEWS_DIST","0.42"), topz-H*_ef("NEWS_AIM","0.09"))
+    if _FIELD:
+        # long-lens standup: focus on her face, throw the environment out of focus (real DoF, so the
+        # world bg gets a natural bokeh fall-off instead of the flat all-sharp env render).
+        cd.dof.use_dof=True
+        cd.dof.focus_distance=(Vector(cam.location)-Vector((cx,cy,topz-H*0.09))).length
+        cd.dof.aperture_fstop=_ef("NEWS_FSTOP","2.2")
 if _SCREEN_IMG:
     # 3D video wall: emissive plane standing in the set, angled toward camera, right of + behind the anchor.
     # NDC mapping (this rig): screen NDC x ~= 0.17 - 1.30*SX, NDC y centers ~0.5 at SZ~0.14. SX<0 -> frame right.

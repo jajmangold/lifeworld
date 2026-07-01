@@ -18,7 +18,7 @@ SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"
 
-MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall; BG=""
+MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall; BG=""; PANO_ENV=""
 while [ $# -gt 0 ]; do case "$1" in
   --audio) AUDIO=$2; shift 2;; --out) OUT=$2; shift 2;; --mood) MOOD=$2; shift 2;;
   --brow) BROW=$2; shift 2;; --nod) NOD=$2; shift 2;; --browbase) BROWBASE=$2; shift 2;;
@@ -30,7 +30,8 @@ while [ $# -gt 0 ]; do case "$1" in
   --screen) SCREEN=$2; shift 2;;     # broadcast mode: 3D video-wall image (reframe MCU + anchor left + screen right)
   --restore) RESTORE=$2; shift 2;;   # GFPGAN restore strength 0..1 (default 0.6; 1.0=waxy, 0=muse-soft)
   --format) FORMAT=$2; shift 2;;     # anchor_wall (default, needs --screen) | fullscreen_anchor | ots
-  --bg) BG=$2; shift 2;;             # composite background plate (e.g. field backdrop for a reporter standup); replaces the studio bg.png
+  --bg) BG=$2; shift 2;;             # composite background plate (flat photo) — replaces the studio bg.png (fallback; --pano is better)
+  --pano) PANO_ENV=$2; shift 2;;     # field/outdoor equirectangular env pano: LIGHTS the character AND renders the bg (proper on-location look)
   --ots) OTS=$2; shift 2;; *) echo "unknown arg: $1"; exit 1;; esac; done
 [ -z "$AUDIO" ] && { echo "need --audio"; exit 1; }
 [ -z "$OUT" ] && { echo "need --out"; exit 1; }
@@ -75,6 +76,14 @@ if [ -n "$SCREEN" ]; then
   SB=$(basename "$SCREEN"); scp -q "$SCREEN" josh@rtx0:$SAMPL/"$SB"
   BENV="${BENV}NEWS_SCREEN=/work/$SB "
   log "broadcast mode: 3D video wall $SB (reframe MCU + anchor left)"
+fi
+if [ -n "$PANO_ENV" ]; then
+  # field/outdoor env: the pano LIGHTS the character and is rendered as bg.png through the camera, so
+  # lighting + background are one coherent world (correct on-location look). Supersedes --bg photo hack.
+  PB=$(basename "$PANO_ENV"); scp -q "$PANO_ENV" josh@rtx0:$SAMPL/"$PB"
+  BENV="${BENV}NEWS_PANO=/work/$PB "
+  BG=""   # pano renders the background itself; don't also overwrite bg.png with a flat photo
+  log "field env: $PB (equirectangular pano lights + backs the standup)"
 fi
 # segment FORMAT (anchor variants): reframe without a wall. fullscreen_anchor=centered, ots=offset (box in post).
 case "$FORMAT" in

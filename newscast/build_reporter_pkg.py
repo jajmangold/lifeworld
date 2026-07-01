@@ -17,7 +17,7 @@ AUDIO = arg("--audio"); OUT = arg("--out", "output/reporter_pkg.mp4")
 NAME = arg("--name", "NNS Correspondent"); LOC = arg("--location", "")
 HEAD = arg("--headline", ""); BROLL = arg("--broll", "")
 STANDUP = float(arg("--standup-sec", "8")); FACE = arg("--face", "reporter_face.png")
-BG = arg("--bg", "output/reporter_bg2.png"); MUSIC = arg("--music", "newscast/music/news_bed.mp3")
+PANO = arg("--pano", "output/field_pano_up.png"); MUSIC = arg("--music", "newscast/music/news_bed.mp3")
 SEED = arg("--seed", "11"); PREMIUM = "--premium" in sys.argv
 stem = os.path.splitext(os.path.basename(OUT))[0]
 
@@ -44,7 +44,7 @@ if has_vo:
 
 # 1) STANDUP head (reporter face on field backdrop)
 su_raw = f"output/{stem}_su_raw.mp4"
-cmd = ["bash","make_anchor.sh","--audio",su_wav,"--out",su_raw,"--face",FACE,"--bg",BG,
+cmd = ["bash","make_anchor.sh","--audio",su_wav,"--out",su_raw,"--face",FACE,"--pano",PANO,
        "--format","fullscreen_anchor","--headtex","","--seed",str(SEED)]
 if PREMIUM: cmd += ["--premium"]
 print("[reporter] standup render…"); r = sh(cmd)
