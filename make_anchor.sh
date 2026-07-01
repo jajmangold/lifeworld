@@ -13,7 +13,7 @@
 #                             stage entirely (~7min/40s saved). Default tex viverse_avatar/anchorM_head_baked.png
 #   --ots "img|LABEL|end; img2|LABEL2|end2"   over-the-shoulder panels (seconds = segment end times)
 set -e
-BOT=/srv/nvme-data/containers/projects/bot
+BOT=/srv/nvme-data/containers/live/studio
 SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"

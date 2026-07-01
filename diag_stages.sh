@@ -2,7 +2,7 @@
 # Per-stage diagnostic: render -> swap -> muse(raw, kept) -> GFPGAN restore.
 # Preserves every intermediate so we can attribute eyes/skin/mouth defects to a stage.
 set -e
-BOT=/srv/nvme-data/containers/projects/bot
+BOT=/srv/nvme-data/containers/live/studio
 SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"

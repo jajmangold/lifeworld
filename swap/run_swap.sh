@@ -7,7 +7,7 @@
 set -e
 NAME=swap-server
 GPU=${SWAP_GPU:-0}
-BOT=/srv/nvme-data/containers/projects/bot
+BOT=/srv/nvme-data/containers/live/studio
 [ "$1" = "stop" ] && { docker rm -f "$NAME" 2>/dev/null && echo "stopped $NAME"; exit 0; }
 docker rm -f "$NAME" 2>/dev/null || true
 docker run -d --name "$NAME" --restart unless-stopped --gpus "\"device=$GPU\"" \
