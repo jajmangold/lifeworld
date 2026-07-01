@@ -17,7 +17,7 @@ AUDIO = arg("--audio"); OUT = arg("--out", "output/reporter_pkg.mp4")
 NAME = arg("--name", "NNS Correspondent"); LOC = arg("--location", "")
 HEAD = arg("--headline", ""); BROLL = arg("--broll", "")
 STANDUP = float(arg("--standup-sec", "8")); FACE = arg("--face", "reporter_face.png")
-BG = arg("--bg", "output/reporter_bg.png"); MUSIC = arg("--music", "newscast/music/news_bed.mp3")
+BG = arg("--bg", "output/reporter_bg2.png"); MUSIC = arg("--music", "newscast/music/news_bed.mp3")
 SEED = arg("--seed", "11"); PREMIUM = "--premium" in sys.argv
 stem = os.path.splitext(os.path.basename(OUT))[0]
 
@@ -74,10 +74,37 @@ if not has_vo:
     sh(["ffmpeg","-y","-i",su_fin,"-c","copy",OUT], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print("REPORTER_PKG_OK (standup only) ->", OUT); sys.exit(0)
 
-# 4) VO-over-broll for the remainder
+# 4) VO-over-broll for the remainder. Distinct footage from the standup plate (so the reporter reads as
+# cutting AWAY to video/pictures, not vanishing from the same street). Multiple --broll images (comma-
+# separated) are sequenced into a Ken-Burns + crossfade reel spanning the VO.
+vo_dur = DUR - split
+imgs = [b for b in BROLL.split(",") if b.strip()] if BROLL else []
+broll_arg = ""
+if len(imgs) > 1:
+    seq = f"output/{stem}_brollseq.mp4"; N = len(imgs); T = 0.7
+    D = (vo_dur + (N - 1) * T) / N                       # per-image on-screen time incl. crossfade overlap
+    fin = []
+    for p in imgs: fin += ["-loop", "1", "-t", f"{D+0.3:.3f}", "-i", p]
+    parts, prev = [], None
+    for i in range(N):
+        z = "min(zoom+0.0006,1.12)"; xp = "iw/2-(iw/zoom/2)" if i % 2 == 0 else "0"
+        parts.append(f"[{i}:v]scale=2816:1584:force_original_aspect_ratio=increase,crop=2816:1584,"
+                     f"zoompan=z='{z}':x='{xp}':d={int(D*25)+8}:s=2560x1440:fps=25,"
+                     f"setpts=PTS-STARTPTS,format=yuv420p[v{i}]")
+    prev = "v0"
+    for k in range(1, N):
+        off = k * (D - T); out = f"x{k}"
+        parts.append(f"[{prev}][v{k}]xfade=transition=fade:duration={T}:offset={off:.3f}[{out}]"); prev = out
+    sh(["ffmpeg", "-y", *fin, "-filter_complex", ";".join(parts), "-map", f"[{prev}]",
+        "-t", f"{vo_dur:.3f}", "-r", "25", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", seq],
+       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    broll_arg = seq
+elif len(imgs) == 1:
+    broll_arg = imgs[0]
+
 vo_mp4 = f"output/{stem}_vopart.mp4"
 cmd = DOCK + ["newscast/build_vo_broll.py","--audio",vo_wav,"--out",vo_mp4,"--music",MUSIC]
-if BROLL: cmd += ["--broll",BROLL]
+if broll_arg: cmd += ["--broll",broll_arg]
 if HEAD: cmd += ["--headline",HEAD]
 sh(cmd, check=True)
 
