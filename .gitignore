@@ -28,3 +28,5 @@ deploy/neo4j-logs/
 
 # os
 .DS_Store
+assets/blenderkit/
+*.cookies
