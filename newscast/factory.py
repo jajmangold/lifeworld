@@ -69,6 +69,19 @@ def run_segment(seg):
         rc = sh(cmd, env)
         if rc == 0:                       # graphics package overlay (bug + lower-third + ticker + bed)
             rc = sh(["bash", "newscast/broadcast_finish.sh", base, out, music])
+    elif fmt == "reporter_pkg":
+        # standup (reporter face on field bg, premium) -> VO over b-roll, one clip. Drives make_anchor
+        # internally, so inherit FLOCK_DIR to serialize render/swap/muse with the anchor segments.
+        cmd = ["python3", "newscast/build_reporter_pkg.py", "--audio", g["audio"], "--out", out,
+               "--name", g.get("reporter", "NNS Correspondent"), "--location", g.get("location", ""),
+               "--music", music]
+        if g.get("premium"): cmd += ["--premium"]
+        if g.get("broll"): cmd += ["--broll", g["broll"]]
+        if g.get("headline"): cmd += ["--headline", g["headline"]]
+        if g.get("standup_sec"): cmd += ["--standup-sec", str(g["standup_sec"])]
+        for k in ("face", "bg", "seed"):
+            if k in g: cmd += [f"--{k}", str(g[k])]
+        rc = sh(cmd, dict(os.environ, FLOCK_DIR=FLOCK_DIR))
     elif fmt == "vo_broll":
         cmd = DOCK + ["newscast/build_vo_broll.py", "--audio", g["audio"], "--out", out, "--music", music]
         if g.get("broll"): cmd += ["--broll", g["broll"]]

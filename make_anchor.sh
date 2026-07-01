@@ -18,7 +18,7 @@ SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"
 
-MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall
+MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall; BG=""
 while [ $# -gt 0 ]; do case "$1" in
   --audio) AUDIO=$2; shift 2;; --out) OUT=$2; shift 2;; --mood) MOOD=$2; shift 2;;
   --brow) BROW=$2; shift 2;; --nod) NOD=$2; shift 2;; --browbase) BROWBASE=$2; shift 2;;
@@ -30,6 +30,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --screen) SCREEN=$2; shift 2;;     # broadcast mode: 3D video-wall image (reframe MCU + anchor left + screen right)
   --restore) RESTORE=$2; shift 2;;   # GFPGAN restore strength 0..1 (default 0.6; 1.0=waxy, 0=muse-soft)
   --format) FORMAT=$2; shift 2;;     # anchor_wall (default, needs --screen) | fullscreen_anchor | ots
+  --bg) BG=$2; shift 2;;             # composite background plate (e.g. field backdrop for a reporter standup); replaces the studio bg.png
   --ots) OTS=$2; shift 2;; *) echo "unknown arg: $1"; exit 1;; esac; done
 [ -z "$AUDIO" ] && { echo "need --audio"; exit 1; }
 [ -z "$OUT" ] && { echo "need --out"; exit 1; }
@@ -83,6 +84,14 @@ esac
 LK render 201   # serialize rtx0 GPU0 across segments (released right after Blender exits)
 $RTX "docker exec sampl bash -lc 'cd /work && mkdir -p output/$ADIR && rm -f output/$ADIR/f*.png && ${BENV}ANCHOR_OUT=/work/output/$ADIR/ CUDA_VISIBLE_DEVICES=0 /opt/blender/blender --background --python render_anchor_anim.py -- --arkit /work/${NAME}.perf.json > /work/output/${NAME}_render.log 2>&1; echo DONE_RC=\$? >> /work/output/${NAME}_render.log'"
 UNLK render 201
+# optional background plate (e.g. field backdrop for a reporter standup): overwrite the studio bg.png
+# with the given image, scaled to COVER the frame. Character stays lit by the studio HDRI (fine for a
+# brief standup); only the composited backdrop changes.
+if [ -n "$BG" ]; then
+  BGB=$(basename "$BG"); scp -q "$BG" josh@rtx0:$SAMPL/"$BGB"
+  $RTX "docker exec sampl python3 -c \"import cv2,numpy as np,sys; d='/work/output/$ADIR'; b=cv2.imread(d+'/bg.png'); H,W=b.shape[:2]; s=cv2.imread('/work/$BGB'); sh,sw=s.shape[:2]; f=max(W/sw,H/sh); r=cv2.resize(s,(int(sw*f+0.5),int(sh*f+0.5))); y=(r.shape[0]-H)//2; x=(r.shape[1]-W)//2; cv2.imwrite(d+'/bg.png', r[y:y+H,x:x+W]); print('BG_SET',W,H)\"" 2>&1 | grep -aE 'BG_SET|Error' | tail -1
+  log "bg plate: $BGB (field backdrop)"
+fi
 # premultiplied-over composite (clean silhouette edges) then encode (CPU — off the GPU lock)
 $RTX "docker exec sampl bash -lc 'cd /work/output/$ADIR && rm -f c[0-9]*.png && python3 /work/composite_premult.py /work/output/$ADIR'" 2>&1 | grep -aE 'COMPOSITE_OK|Error' | tail -1
 $RTX "docker exec sampl bash -lc 'cd /work/output/$ADIR && ffmpeg -y -framerate 25 -i c%04d.png -c:v libx264 -pix_fmt yuv420p -crf 18 /work/output/${NAME}_silent.mp4 2>&1 | tail -1'" >/dev/null
