@@ -41,23 +41,48 @@ def staggered_start():
 def build_cmd(seg):
     g = dict(defaults); g.update(seg)
     name = g["name"]; out = g.get("out", f"output/{name}_final.mp4")
-    cmd = ["bash", "make_anchor.sh", "--audio", g["audio"], "--out", out]
-    if g.get("premium"): cmd += ["--premium"]
-    if g.get("screen"):  cmd += ["--screen", g["screen"]]
-    for k in ("mood", "brow", "nod", "seed", "restore", "face", "headtex", "ots"):
-        if k in g: cmd += [f"--{k}", str(g[k])]
-    return name, out, cmd
+    fmt = g.get("format", "anchor_wall")
+    return name, out, fmt
+
+ANCHOR_FMTS = ("anchor_wall", "fullscreen_anchor", "ots")
+DOCK = ["docker", "run", "--rm", "-v", f"{BOT}:/io", "-w", "/io", "mp-extract:1.0", "python3"]
 
 def run_segment(seg):
-    name, out, cmd = build_cmd(seg)
+    g = dict(defaults); g.update(seg)
+    name = g["name"]; fmt = g.get("format", "anchor_wall"); out = g.get("out", f"output/{name}_final.mp4")
+    music = g.get("music", "newscast/music/news_bed.mp3")
     staggered_start()
-    env = dict(os.environ, FLOCK_DIR=FLOCK_DIR, ANCHOR_OUT=f"/work/output/anchor_anim_{name}/")
     t0 = time.time()
     log = open(os.path.join(BOT, f"output/factory_{name}.log"), "w")
-    print(f"[factory] start {name}", flush=True)
-    rc = subprocess.call(cmd, cwd=BOT, env=env, stdout=log, stderr=subprocess.STDOUT)
+    print(f"[factory] start {name} [{fmt}]", flush=True)
+    def sh(cmd, env=None): return subprocess.call(cmd, cwd=BOT, env=env, stdout=log, stderr=subprocess.STDOUT)
+    rc = 0
+    if fmt in ANCHOR_FMTS:
+        base = f"output/{name}_base.mp4"
+        cmd = ["bash", "make_anchor.sh", "--audio", g["audio"], "--out", base, "--format", fmt]
+        if g.get("premium"): cmd += ["--premium"]
+        if fmt == "anchor_wall" and g.get("screen"): cmd += ["--screen", g["screen"]]
+        if fmt == "ots" and g.get("ots"): cmd += ["--ots", g["ots"]]
+        for k in ("mood", "brow", "nod", "seed", "restore", "face", "headtex"):
+            if k in g: cmd += [f"--{k}", str(g[k])]
+        env = dict(os.environ, FLOCK_DIR=FLOCK_DIR, ANCHOR_OUT=f"/work/output/anchor_anim_{name}/")
+        rc = sh(cmd, env)
+        if rc == 0:                       # graphics package overlay (bug + lower-third + ticker + bed)
+            rc = sh(["bash", "newscast/broadcast_finish.sh", base, out, music])
+    elif fmt == "vo_broll":
+        cmd = DOCK + ["newscast/build_vo_broll.py", "--audio", g["audio"], "--out", out, "--music", music]
+        if g.get("broll"): cmd += ["--broll", g["broll"]]
+        if g.get("headline"): cmd += ["--headline", g["headline"]]
+        rc = sh(cmd)
+    elif fmt == "title":
+        cmd = DOCK + ["newscast/build_title.py", "--title", g.get("title", "NNS"), "--out", out, "--music", music]
+        if g.get("subtitle"): cmd += ["--subtitle", g["subtitle"]]
+        if g.get("dur"): cmd += ["--dur", str(g["dur"])]
+        rc = sh(cmd)
+    else:
+        print(f"[factory] unknown format '{fmt}' for {name}", flush=True); rc = 2
     dt = time.time() - t0
-    print(f"[factory] {'OK' if rc==0 else 'FAIL(%d)'%rc} {name} in {dt/60:.1f}min -> {out}", flush=True)
+    print(f"[factory] {'OK' if rc==0 else 'FAIL(%d)'%rc} {name} [{fmt}] in {dt/60:.1f}min -> {out}", flush=True)
     return name, out, rc, dt
 
 if __name__ == "__main__":

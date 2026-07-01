@@ -18,7 +18,7 @@ SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"
 
-MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6
+MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall
 while [ $# -gt 0 ]; do case "$1" in
   --audio) AUDIO=$2; shift 2;; --out) OUT=$2; shift 2;; --mood) MOOD=$2; shift 2;;
   --brow) BROW=$2; shift 2;; --nod) NOD=$2; shift 2;; --browbase) BROWBASE=$2; shift 2;;
@@ -29,6 +29,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --headtex) HEADTEX=$2; shift 2;;   # improved skin/hair base texture (swap still runs). DEFAULT anchorM_klein_head.png; pass --headtex "" to disable
   --screen) SCREEN=$2; shift 2;;     # broadcast mode: 3D video-wall image (reframe MCU + anchor left + screen right)
   --restore) RESTORE=$2; shift 2;;   # GFPGAN restore strength 0..1 (default 0.6; 1.0=waxy, 0=muse-soft)
+  --format) FORMAT=$2; shift 2;;     # anchor_wall (default, needs --screen) | fullscreen_anchor | ots
   --ots) OTS=$2; shift 2;; *) echo "unknown arg: $1"; exit 1;; esac; done
 [ -z "$AUDIO" ] && { echo "need --audio"; exit 1; }
 [ -z "$OUT" ] && { echo "need --out"; exit 1; }
@@ -74,6 +75,11 @@ if [ -n "$SCREEN" ]; then
   BENV="${BENV}NEWS_SCREEN=/work/$SB "
   log "broadcast mode: 3D video wall $SB (reframe MCU + anchor left)"
 fi
+# segment FORMAT (anchor variants): reframe without a wall. fullscreen_anchor=centered, ots=offset (box in post).
+case "$FORMAT" in
+  fullscreen_anchor) BENV="${BENV}NEWS_MCU=1 NEWS_SHIFTX=0 "; log "format: fullscreen_anchor (centered MCU)";;
+  ots)               BENV="${BENV}NEWS_MCU=1 NEWS_SHIFTX=0.33 "; log "format: ots (anchor left, OTS box in post)";;
+esac
 LK render 201   # serialize rtx0 GPU0 across segments (released right after Blender exits)
 $RTX "docker exec sampl bash -lc 'cd /work && mkdir -p output/$ADIR && rm -f output/$ADIR/f*.png && ${BENV}ANCHOR_OUT=/work/output/$ADIR/ CUDA_VISIBLE_DEVICES=0 /opt/blender/blender --background --python render_anchor_anim.py -- --arkit /work/${NAME}.perf.json > /work/output/${NAME}_render.log 2>&1; echo DONE_RC=\$? >> /work/output/${NAME}_render.log'"
 UNLK render 201

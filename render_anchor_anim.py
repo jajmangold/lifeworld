@@ -192,17 +192,21 @@ cam=bpy.data.objects.new("cam",cd);bpy.context.collection.objects.link(cam)
 cam.location=(cx,mx.y+H*0.62,aimz);cam.rotation_euler=(math.radians(90),0,math.radians(180))
 sc.camera=cam
 
-# ---- BROADCAST MODE (env NEWS_SCREEN=<image>): reframe to MCU + anchor on left third + 3D video wall ----
+# ---- BROADCAST MODE: MCU reframe (any anchor format) + optional 3D video wall (anchor_wall only) ----
+# NEWS_MCU=1 (or NEWS_SCREEN set) -> reframe to medium-close-up. NEWS_SCREEN=<image> -> add the 3D wall
+# and default the anchor to the left third; without a screen (fullscreen_anchor/ots) default centered.
 import os as _os
 _SCREEN_IMG=_os.environ.get("NEWS_SCREEN")
+_MCU=bool(_SCREEN_IMG) or _os.environ.get("NEWS_MCU")
 _char_meshes=[o for o in bpy.data.objects if o.type=="MESH"]   # avatar meshes (before the screen is added)
 _screen=None
-if _SCREEN_IMG:
-    def _ef(k,d): return float(_os.environ.get(k,d))
-    # reframe: medium close-up + horizontal lens shift to push the anchor to the left third
+def _ef(k,d): return float(_os.environ.get(k,d))
+if _MCU:
+    # reframe: medium close-up + horizontal lens shift (default: pushed left when a wall is present, else centered)
     cd.lens=_ef("NEWS_LENS","92")
-    cd.shift_x=_ef("NEWS_SHIFTX","0.33")
+    cd.shift_x=_ef("NEWS_SHIFTX", "0.33" if _SCREEN_IMG else "0.0")
     cam.location=(cx, mx.y+H*_ef("NEWS_DIST","0.42"), topz-H*_ef("NEWS_AIM","0.09"))
+if _SCREEN_IMG:
     # 3D video wall: emissive plane standing in the set, angled toward camera, right of + behind the anchor.
     # NDC mapping (this rig): screen NDC x ~= 0.17 - 1.30*SX, NDC y centers ~0.5 at SZ~0.14. SX<0 -> frame right.
     bpy.ops.mesh.primitive_plane_add(size=1.0)
@@ -225,7 +229,7 @@ if _SCREEN_IMG:
 # ---- render settings ----
 sc.render.engine="BLENDER_EEVEE_NEXT"
 # broadcast MCU magnifies the HASHED-material TAA dither (checker on the white shirt) -> more samples.
-sc.eevee.taa_render_samples=int(os.environ.get("NEWS_SAMPLES", "64" if os.environ.get("NEWS_SCREEN") else "32"))
+sc.eevee.taa_render_samples=int(os.environ.get("NEWS_SAMPLES", "64" if _MCU else "32"))
 # opaque face/body should cast OPAQUE (not alpha-tested/dithered) shadows — the HASHED materials
 # otherwise throw a stochastic checker into the neck/collar shadow on the white shirt. (Camera-side
 # alpha cutout is untouched, so no black shoulder patches.)
