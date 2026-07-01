@@ -1,8 +1,8 @@
 """Generic character renderer for a BlenderKit (Rigify) rigged .blend — the viverse-free path.
 Loads the character, frames a medium-close-up, lights it with an HDRI (studio or field pano), drives
 blinks/brows from the ARKit perf + subtle idle head motion, renders premultiplied frames for the
-premult-over composite. MuseTalk owns the mouth downstream; the BlenderKit face is already photoreal so
-no face-swap is needed. Mirrors render_anchor_anim's world/light/camera, remapped to the Rigify rig.
+premult-over composite. MuseTalk owns the mouth downstream. A face-swap (photoreal identity) IS applied like the anchor path:
+the BlenderKit face is semi-stylized, so swap brings a photoreal identity + blends the muse seam.
   blender -b --python render_character.py -- --blend char.blend --arkit perf.json
 Env: NEWS_PANO (HDRI), ANCHOR_OUT (frame dir), NEWS_LENS/DIST/AIM/FSTOP/ENVSTR, NEWS_MCU.
 """
