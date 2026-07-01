@@ -11,10 +11,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))        # live
 DEST = os.path.join(ROOT, "assets", "blenderkit")
 API = "https://www.blendkit.com/api/v1"
 COOKIE_FILE = os.path.expanduser("~/.config/studio/blendkit.cookies")     # session (never committed)
-UA = {"User-Agent": "studio/1.0 (blenderkit client)", "Accept": "application/json"}
+UA = {"User-Agent": "BlenderKit-Client/1.0", "Accept": "application/json"}   # WAF blocks bot UAs
+
+TOKEN_FILE = os.path.expanduser("~/.config/studio/blenderkit.token")
 
 def _key(explicit=None):
-    return (explicit or os.environ.get("BLENDERKIT_API_KEY", "")).strip()
+    k = (explicit or os.environ.get("BLENDERKIT_API_KEY", "")).strip()
+    if k: return k
+    if os.path.isfile(TOKEN_FILE):                       # OAuth access_token from blenderkit_login.py
+        try: return (json.load(open(TOKEN_FILE)).get("access_token") or "").strip()
+        except Exception: return ""
+    return ""
 
 def _auth(explicit_key=None):
     """Prefer a Bearer API key; else fall back to the stored browser session cookie."""
@@ -77,7 +84,10 @@ def download(asset_base_id, key=None, prefer_gltf=False):
     d = os.path.join(DEST, slug); os.makedirs(d, exist_ok=True)
     ext = f.get("fileType", "blend")
     out = os.path.join(d, f"asset.{ext}")
-    urllib.request.urlretrieve(file_url, out)
+    # fetch the signed CDN file with a real UA (the asset CDN WAF 403s the default urllib UA)
+    with urllib.request.urlopen(urllib.request.Request(file_url, headers={"User-Agent": UA["User-Agent"]}), timeout=600) as r, open(out, "wb") as w:
+        while chunk := r.read(1 << 20):
+            w.write(chunk)
     json.dump(a, open(os.path.join(d, "meta.json"), "w"))
     print("BLENDERKIT_OK ->", out, f"({os.path.getsize(out)//1024}KB, {ext}, rig={a.get('dictParameters',{}).get('rig')})")
     return out
