@@ -1,0 +1,6 @@
+{
+  "nns": {"name": "National News Service", "logo": "newscast/assets/nns_logo.png",
+          "colors": {"navy": "#0c1630", "red": "#c8142e", "white": "#ffffff"},
+          "bug": true, "ticker": true, "lower_third_style": "nns",
+          "music_bed": "newscast/music/news_bed.mp3", "no_live": true, "no_clock": true}
+}

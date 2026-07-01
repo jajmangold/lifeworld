@@ -1,0 +1,7 @@
+{
+  "newsroom": {"kind": "studio", "env": "output/newsroom_pano.png", "video_wall": true,
+               "framing": {"lens": 92, "dist": 0.42, "aim": 0.09, "shift_x": 0.33}},
+  "flood_field": {"kind": "field", "env": "output/field_pano_up.png", "video_wall": false,
+                  "framing": {"lens": 70, "dist": 0.46, "aim": 0.09, "fstop": 2.2}},
+  "broll_plate": {"kind": "broll", "env": null}
+}
