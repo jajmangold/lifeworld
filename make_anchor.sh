@@ -18,7 +18,7 @@ SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"
 
-MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall; BG=""; PANO_ENV=""; GLBFILE=""
+MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall; BG=""; PANO_ENV=""; GLBFILE=""; KEEPEYES=true
 while [ $# -gt 0 ]; do case "$1" in
   --audio) AUDIO=$2; shift 2;; --out) OUT=$2; shift 2;; --mood) MOOD=$2; shift 2;;
   --brow) BROW=$2; shift 2;; --nod) NOD=$2; shift 2;; --browbase) BROWBASE=$2; shift 2;;
@@ -33,6 +33,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --bg) BG=$2; shift 2;;             # composite background plate (flat photo) — replaces the studio bg.png (fallback; --pano is better)
   --pano) PANO_ENV=$2; shift 2;;     # field/outdoor equirectangular env pano: LIGHTS the character AND renders the bg (proper on-location look)
   --glb) GLBFILE=$2; shift 2;;       # swap the character mesh (e.g. a viverse reporter VRM/GLB) instead of the anchor
+  --keepeyes) KEEPEYES=$2; shift 2;; # keep the RENDER's eyes during face-swap (true, default). false => swap brings the source's eyes (fixes viverse dark-eye meshes)
   --ots) OTS=$2; shift 2;; *) echo "unknown arg: $1"; exit 1;; esac; done
 [ -z "$AUDIO" ] && { echo "need --audio"; exit 1; }
 [ -z "$OUT" ] && { echo "need --out"; exit 1; }
@@ -139,7 +140,7 @@ else
     LK swap 202   # serialize the V100 swap-server across segments
     # swap WITHOUT GFPGAN (soft, fast) + save detected faces — GFPGAN is moved to a final restore pass
     # after MuseTalk so it also sharpens the soft 256px muse mouth (same total compute, better quality).
-    printf '{"src":"/o/%s","video":"/o/%s_silent.mp4","out":"/o/%s_swap.mp4","keepeyes":true,"enhance":false,"save_faces":"/o/%s.faces.json"}\n' "$FACE" "$NAME" "$NAME" "$NAME" > output/swap_jobs/${NAME}.json
+    printf '{"src":"/o/%s","video":"/o/%s_silent.mp4","out":"/o/%s_swap.mp4","keepeyes":%s,"enhance":false,"save_faces":"/o/%s.faces.json"}\n' "$FACE" "$NAME" "$NAME" "$KEEPEYES" "$NAME" > output/swap_jobs/${NAME}.json
     while [ ! -f output/swap_jobs/${NAME}.done ] && [ ! -f output/swap_jobs/${NAME}.err ]; do sleep 3; done
     UNLK swap 202
     [ -f output/swap_jobs/${NAME}.err ] && { echo "SWAP ERR: $(cat output/swap_jobs/${NAME}.err)"; exit 1; }
