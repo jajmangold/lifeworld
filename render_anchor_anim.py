@@ -17,7 +17,7 @@ RIM     = argf("--rim", 0.0)        # back/hair rim light. 0 by default: the pre
                                     # bright "silver lining" halo around hair/shoulders. Dial up only
                                     # if a specific dark bg needs hair separation.
 EXPO    = argf("--expo", -0.9)     # exposure stops (was -0.5)
-GLB     = "/work/avatar.glb"
+GLB     = os.environ.get("NEWS_GLB", "/work/avatar.glb")   # swap the character mesh (e.g. a viverse reporter VRM)
 # world environment (equirectangular): lights the character AND is rendered as the bg.png behind it, so
 # lighting + background come from ONE coherent world. Override with NEWS_PANO for a field/outdoor env
 # (e.g. a generated flood pano) instead of the newsroom studio — this is the RIGHT way to place a
@@ -125,6 +125,16 @@ sc = bpy.context.scene
 sc.render.fps = int(round(FPS))
 sc.frame_start = 1; sc.frame_end = NF
 
+# ARKit -> native viverse shape-key aliases. The anchor glb was augmented with a full ARKit-52 set, but a
+# RAW viverse avatar (e.g. a reporter VRM) only has native names. Alias the few micro-expressions we drive
+# so blinks/brows fire on raw avatars too. Used ONLY when the ARKit name is absent (anchor unaffected).
+ALIAS = {"eyeBlinkLeft":["Eye_Blink_L"], "eyeBlinkRight":["Eye_Blink_R"],
+         "browInnerUp":["EyeB_Up_L","EyeB_Up_R"], "browOuterUpLeft":["EyeB_Up_L"],
+         "browOuterUpRight":["EyeB_Up_R"], "eyeSquintLeft":["Eye_Squint_L"], "eyeSquintRight":["Eye_Squint_R"]}
+def _targets(nm):
+    if nm in kb_by_name: return [nm]
+    return [a for a in ALIAS.get(nm, []) if a in kb_by_name]
+
 # ---- keyframe driven blendshapes per frame + subtle body idle + micro head motion ----
 spine = ["Avatar_Spine","Avatar_Spine1","Avatar_Spine2"]
 def key_pose(name, f):
@@ -135,9 +145,9 @@ for fi in range(NF):
     t = fi/FPS
     # facial: drive processed micro-expression curves, keyframe
     for nm, col in CURVE.items():
-        if nm in kb_by_name:
-            v = col[fi]
-            for o,kb in kb_by_name[nm]:
+        v = col[fi]
+        for tnm in _targets(nm):
+            for o,kb in kb_by_name[tnm]:
                 kb.value = v
                 kb.keyframe_insert("value", frame=f)
     # body idle: breathing on spine, gentle head sway/nod (* mood head_amp) + emphasis nod (HEAD)

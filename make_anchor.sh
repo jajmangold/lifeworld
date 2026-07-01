@@ -18,7 +18,7 @@ SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"
 
-MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall; BG=""; PANO_ENV=""
+MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall; BG=""; PANO_ENV=""; GLBFILE=""
 while [ $# -gt 0 ]; do case "$1" in
   --audio) AUDIO=$2; shift 2;; --out) OUT=$2; shift 2;; --mood) MOOD=$2; shift 2;;
   --brow) BROW=$2; shift 2;; --nod) NOD=$2; shift 2;; --browbase) BROWBASE=$2; shift 2;;
@@ -32,6 +32,7 @@ while [ $# -gt 0 ]; do case "$1" in
   --format) FORMAT=$2; shift 2;;     # anchor_wall (default, needs --screen) | fullscreen_anchor | ots
   --bg) BG=$2; shift 2;;             # composite background plate (flat photo) — replaces the studio bg.png (fallback; --pano is better)
   --pano) PANO_ENV=$2; shift 2;;     # field/outdoor equirectangular env pano: LIGHTS the character AND renders the bg (proper on-location look)
+  --glb) GLBFILE=$2; shift 2;;       # swap the character mesh (e.g. a viverse reporter VRM/GLB) instead of the anchor
   --ots) OTS=$2; shift 2;; *) echo "unknown arg: $1"; exit 1;; esac; done
 [ -z "$AUDIO" ] && { echo "need --audio"; exit 1; }
 [ -z "$OUT" ] && { echo "need --out"; exit 1; }
@@ -77,6 +78,14 @@ if [ -n "$SCREEN" ]; then
   BENV="${BENV}NEWS_SCREEN=/work/$SB "
   log "broadcast mode: 3D video wall $SB (reframe MCU + anchor left)"
 fi
+if [ -n "$GLBFILE" ]; then
+  # custom character mesh (viverse VRM/GLB). Blender's glTF importer needs a .glb/.gltf extension, so a
+  # .vrm (which IS glb) is staged as .glb. Same viverse rig as the anchor (Avatar_* bones), so idle
+  # motion + blink aliases just work; disable the anchor head-tex (--headtex "") so her own skin shows.
+  GB=$(basename "$GLBFILE"); GB="${GB%.vrm}.glb"; scp -q "$GLBFILE" josh@rtx0:$SAMPL/"$GB"
+  BENV="${BENV}NEWS_GLB=/work/$GB "
+  log "custom mesh: $GB (viverse character)"
+fi
 if [ -n "$PANO_ENV" ]; then
   # field/outdoor env: the pano LIGHTS the character and is rendered as bg.png through the camera, so
   # lighting + background are one coherent world (correct on-location look). Supersedes --bg photo hack.
@@ -90,6 +99,11 @@ case "$FORMAT" in
   fullscreen_anchor) BENV="${BENV}NEWS_MCU=1 NEWS_SHIFTX=0 "; log "format: fullscreen_anchor (centered MCU)";;
   ots)               BENV="${BENV}NEWS_MCU=1 NEWS_SHIFTX=0.33 "; log "format: ots (anchor left, OTS box in post)";;
 esac
+# forward framing/env overrides set in the caller's environment (per-character tuning, e.g. a viverse
+# avatar with different proportions needs its own headroom/lens): NEWS_AIM/DIST/LENS/FSTOP/WALLROT/ENVSTR.
+for _v in NEWS_AIM NEWS_DIST NEWS_LENS NEWS_FSTOP NEWS_WALLROT NEWS_ENVSTR NEWS_SHIFTX; do
+  eval "_val=\${$_v}"; [ -n "$_val" ] && BENV="${BENV}$_v=$_val "
+done
 LK render 201   # serialize rtx0 GPU0 across segments (released right after Blender exits)
 $RTX "docker exec sampl bash -lc 'cd /work && mkdir -p output/$ADIR && rm -f output/$ADIR/f*.png && ${BENV}ANCHOR_OUT=/work/output/$ADIR/ CUDA_VISIBLE_DEVICES=0 /opt/blender/blender --background --python render_anchor_anim.py -- --arkit /work/${NAME}.perf.json > /work/output/${NAME}_render.log 2>&1; echo DONE_RC=\$? >> /work/output/${NAME}_render.log'"
 UNLK render 201
