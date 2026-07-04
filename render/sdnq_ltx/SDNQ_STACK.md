@@ -167,6 +167,18 @@ continuation. Not yet integrated (see §10).
 - `modality_scale` doubles TIME, same VRAM (the two passes run sequentially).
 - **Production base** (`use_quantized_matmul=True`, no audio, no modality) is much faster: **~23.6 s/clip**.
   The sweep above is the slow eager path — divide by ~2–4 for the quantized-matmul base.
+- **MEASURED on the production path (`QMM=1`, 2026-07-04)** — both controls work under quantized-matmul with
+  **no quality loss** (qwen-verified frames): **a2v** 256×384/mod3/73f = **58.6s** (~6.3s/step steady) vs
+  eager 97s; **IC-LoRA** green/73f = **44.4s** (~4.3s/step) vs eager 70s → **~1.7–2× faster**. The **384×512
+  OOM ceiling is UNCHANGED** by quantized-matmul (it's attention memory). Higher res needs attention/VAE
+  **tiling** (largely untried — diffusers `enable_attention_slicing` is ignored by `LTX2PerturbedAttnProcessor`)
+  or multi-GPU. `ic_union.py`/`a2v_talk.py` now take a `QMM` env (default 0/eager; set 1 for production).
+- **10s long clip via `sdnq_llong.py` (windowed, MEASURED)**: 249f/256×384 = **688s (~11.5 min)**, 4 windows
+  × ~147s + 42s framewise decode; quality **9/10** (qwen), continuity struct 0.989 / seam 0.983. BUT it's
+  the **offload** path — the ~147s/window is dominated by evicting/reloading the transformer over PCIe Gen1
+  ×1 EACH window, not denoise. A **resident** windowed path (`sdnq_ltx_resident.py`, transformer pinned) would
+  cut this to ~denoise-only (~4–5 min). **Takeaway:** for long clips use resident windowing, not offload; for
+  throughput, short clips on the resident farm (6× parallel) win.
 - **VAE decode** (framewise): per 10-latent chunk 3.8 s (256×384) / 5.3 s (320×448) / 7.1 s (384×512).
   A single 32-latent decode OOMs → framewise/temporal tiling required (§5).
 - **10 s clip (≈32 latent frames, ~4 latent-windows), resident, one card, eager+mod=3 extrapolated:**

@@ -18,7 +18,7 @@ LORA="/root/ComfyUI/models/loras/ltxv/ltx2/ltx-2.3-22b-ic-lora-union-control-ref
 EMB="/root/ComfyUI/output/embeds_fcb0316dc2.pt"; CONN="/root/ComfyUI/output/conn_fcb0316dc2.pt"
 SIG=[1.0,0.99375,0.9875,0.98125,0.975,0.909375,0.725,0.421875]
 base=DiffusionPipeline.from_pretrained(PATH,torch_dtype=DT,text_encoder=None)
-base.transformer=apply_sdnq_options_to_model(base.transformer,dtype=DT,use_quantized_matmul=False)
+base.transformer=apply_sdnq_options_to_model(base.transformer,dtype=DT,use_quantized_matmul=bool(int(os.environ.get("QMM","0"))))
 comp={k:v for k,v in base.components.items() if k in set(inspect.signature(LTX2ConditionPipeline.__init__).parameters)};comp["text_encoder"]=None
 pipe=LTX2ConditionPipeline(**comp)
 _ct=tuple(torch.load(CONN,map_location="cpu"));pipe.connectors=lambda pe_,pm_,padding_side="left":tuple(x.to(pe_.device) for x in _ct)
