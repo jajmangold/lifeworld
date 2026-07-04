@@ -27,7 +27,7 @@ finishing path; **newscast/** does script+TTS+graphics; **NNS** brand. See `rend
   - Done-when: `pm/QUALITY_BAR.md` defines pass/fail thresholds — lip-sync (audio-driven, verified),
     identity consistency, motion/no-glitch, resolution/sharpness, throughput/segment — with the qwen-QA
     method to score each. (Defines the bar; does not assume we meet it.)
-- **[T0.1b] SPIKE: what does it take to hit the lip-sync/motion bar?** · P0 · todo · `[exp]` time-box ~2–3 days
+- **[T0.1b] SPIKE: what does it take to hit the lip-sync/motion bar?** · P0 · wip · `[exp]` time-box ~2–3 days
   - Ships: a decision on the anchor pipeline of record + evidence it can hit the bar.
   - Depends-on: T0.1a
   - Done-when: the real options are evaluated against the bar × complexity × runs-on-farm, and ONE is chosen
@@ -47,6 +47,12 @@ finishing path; **newscast/** does script+TTS+graphics; **NNS** brand. See `rend
   - NOTE (measured this session): both a2v AND IC-LoRA work on the **production `use_quantized_matmul=True`**
     path with **no quality loss and ~1.7–2× speedup** (a2v 256×384 = 58.6s vs eager 97s; ic_union = 44s).
     The 384×512 OOM ceiling is unchanged by quantized-matmul (it's attention memory) — hence option (a).
+  - EVIDENCE (T0.1b, 2026-07-04): built `a2v_two_stage.py` (a2v audio-driven → LTX2 spatial x2 upsampler →
+    3-step refine) — **512×768 FITS one card (offload, ~12.8GB)** and is **SHARP (qwen 9/10)**. Resolution
+    is SOLVED via the spatial upscaler. BUT **lip-MOTION amplitude is still minimal** (qwen: mouth "same
+    shape" across frames) — the refine sharpened the subtle a2v motion, didn't increase it. So the crisp-
+    lips problem splits: **sharpness = solved (two-stage); motion amplitude = the real open gap** (likely
+    levers: modality_scale, audio↔video length match, confirm audio-driven). Investigating next.
 - **[T0.1c] Implement the chosen approach to the bar** · P0 · todo
   - Ships: the production-quality anchor itself.
   - Depends-on: T0.1b
