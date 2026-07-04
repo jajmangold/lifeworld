@@ -32,16 +32,16 @@ finishing path; **newscast/** does script+TTS+graphics; **NNS** brand. See `rend
   - Depends-on: T0.1a
   - Done-when: the real options are evaluated against the bar × complexity × runs-on-farm, and ONE is chosen
     with evidence. Options to weigh (don't pre-decide):
-    - **(a) Fit higher res (512×768) on ONE card via TILING/chunked attention.** The "384×512 hard ceiling"
-      was NOT fully explored — only diffusers `enable_attention_slicing` was tried, and the custom
-      `LTX2PerturbedAttnProcessor` ignores it. Untested: transformer-level attention tiling/chunking (query
-      blocks), memory-efficient/chunked SDPA, VAE-tiling already helps decode. **Try this first** — if it
-      works, crisp lips need no multi-GPU (boring-tech win).
-    - **(b) Multi-GPU** tensor/sequence-parallel a2v at 512×768 (uses the farm fan-out; bigger spend — only
-      if (a) fails).
-    - **(c) Two-stage**: motion at the fittable res → dedicated high-res re-lip/relight pass.
-    - **(d) External high-res lip-sync** on a high-res anchor still.
-    - **(e) Tighter MCU framing** where current res already suffices (cheapest).
+    - **(a) PRIMARY — wire a2v into the two-stage SPATIAL UPSCALER.** The *official* path past the ceiling,
+      already working: `sdnq_two_stage.py` denoises 256×384 → LTX2 spatial x2 latent upsampler → refines to
+      **512×768** (sharp — qwen "high resolution" vs single-stage "moderate") **on one card**, the res
+      single-stage a2v OOMs at. Gap: a2v (audio-driven motion) is NOT wired to it. Task: a2v at 256/384 →
+      spatial-upscale latents → 3-step refine → decode; verify **lip motion survives the refine** + crisp
+      mouth (qwen). Also test the **temporal upscaler** (`temporal_upsample=True`, unused today) for motion
+      smoothness. Upscaler weights live in the full Lightricks LTX-2.3 cache, not the SDNQ checkpoint.
+    - **(b) Attention/VAE tiling** to fit 512×768 single-stage — only if (a) can't preserve lip motion.
+    - **(c) Multi-GPU** tensor/sequence-parallel — last resort (bigger spend).
+    - **(d) Tighter MCU framing** where current res already suffices (cheapest fallback).
     Kill criterion: if none clears the bar in the time-box, escalate. First steps: prove a2v is genuinely
     audio-driven (silent-vs-speech differential); QA all comparisons with qwen9b.
   - NOTE (measured this session): both a2v AND IC-LoRA work on the **production `use_quantized_matmul=True`**
