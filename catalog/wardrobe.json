@@ -1,0 +1,112 @@
+{
+  "_doc": "Wardrobe dept \u2014 physical BlenderKit character/garment assets (distinct from catalog/talent.json, which is the on-air PERSONA). A talent entry references a wardrobe item by id via its `avatar`/`wardrobe` field. blend_format must be <= BLENDER-v402 to open in rtx0's Blender 4.2. `hair_ok` = hair stays out of the face on-camera. Managed by newscast/wardrobe.py.",
+  "characters": {
+    "businessman_anchor": {
+      "kind": "character",
+      "name": "Businessman",
+      "gender": "male",
+      "role": "anchor",
+      "asset_id": "90074665-0000-0000-0000-000000000000",
+      "blend": "assets/blenderkit/Businessman/asset.blend",
+      "blend_format": "BLENDER-v402",
+      "rig": "rigify",
+      "hair": "short natural side-part",
+      "hair_ok": true,
+      "outfit": "charcoal business suit",
+      "cam_side": -1,
+      "textures": {},
+      "hd_blend": null,
+      "used_by": "graham_pierce",
+      "tags": [
+        "compat",
+        "photoreal",
+        "shippable"
+      ],
+      "notes": "Best male foundation: natural hair (no glossy issue), v402-compatible. Face is swapped (anchorM.png)."
+    },
+    "business_female": {
+      "kind": "character",
+      "name": "Business Female Character Formal Suit",
+      "gender": "female",
+      "role": "reporter",
+      "asset_id": "business-female-formal-suit",
+      "blend": "assets/blenderkit/Business_Female_Character_Formal_Suit/asset.blend",
+      "blend_format": "BLENDER-v402",
+      "rig": "rigify",
+      "hair": "glossy wavy bob (drapes toward face)",
+      "hair_ok": false,
+      "outfit": "grey formal suit",
+      "cam_side": -1,
+      "textures": {
+        "retexture": {
+          "method": "recolor",
+          "maps": "outfit",
+          "instruction": "deep navy blue business suit",
+          "material": "outfit",
+          "mode": "lab_chroma_transfer"
+        }
+      },
+      "hd_blend": "assets/blenderkit/business_female_hd.blend",
+      "used_by": null,
+      "tags": [
+        "compat",
+        "hair-glossy",
+        "hair-in-face",
+        "navy-suit"
+      ],
+      "notes": "First female pull. Hair drapes the face + renders glossy (fix via HAAR graft). hd_blend = clean DEEP NAVY suit via `retexture --method recolor` (LAB luminance-preserving chroma transfer; sd.cpp/Klein picks the color from an edited render). Artifact-free. NOTE: --method klein (projection-bake) gives digital-camo on this jacket's fragmented UV islands -- use recolor for color changes, klein only for spatial patterns on clean UVs. Blouse tints light-blue with the suit (neutral texel); mask by UV quadrant if it must stay white."
+    },
+    "formal_woman": {
+      "kind": "character",
+      "name": "Formal woman",
+      "gender": "female",
+      "role": "reporter",
+      "asset_id": "2a490fba-0e0c-45fe-ad22-5a435fed9663",
+      "blend": "assets/blenderkit/Formal_woman/asset.blend",
+      "blend_format": "BLENDER-v400",
+      "rig": "rigify",
+      "hair": "wavy bob card-mesh \u2014 renders as rubbery grey helmet",
+      "hair_ok": false,
+      "outfit": "gold bare-shoulder goddess gown (wrong for news)",
+      "cam_side": -1,
+      "textures": {},
+      "hd_blend": null,
+      "used_by": null,
+      "tags": [
+        "compat",
+        "makehuman",
+        "rejected",
+        "hair-rubbery",
+        "outfit-wrong"
+      ],
+      "notes": "REJECTED (Qwen 4/10, me: fail). MakeHuman elvs_ char: card-mesh hair shades like molded rubber + evening-gown outfit. LESSON: avoid MakeHuman (elvs_) female chars \u2014 bad hair + costume outfits. Face-swap/skin were fine."
+    },
+    "talking_arab_woman": {
+      "kind": "character",
+      "name": "Talking Arab Woman",
+      "gender": "female",
+      "role": "reporter",
+      "asset_id": "f8b6b216-0255-452a-9a5c-dcce024c0439",
+      "blend": "assets/blenderkit/Talking_Arab_Woman/asset.blend",
+      "blend_format": "BLENDER-v401",
+      "rig": "arkit-52 (Armature, Head/Neck, 54 bones)",
+      "hair": "covered by hijab",
+      "hair_ok": true,
+      "outfit": "black hijab head-covering + shawl (satiny \u2014 soften roughness)",
+      "cam_side": -1,
+      "textures": {},
+      "hd_blend": null,
+      "used_by": "elise_warren",
+      "tags": [
+        "compat",
+        "photoreal",
+        "shippable",
+        "arkit",
+        "talking-optimized",
+        "hair-covered"
+      ],
+      "notes": "WINNER (Qwen 9/10, me: best female yet). Proper ARKit-52 face rig (native eyeBlink/browInnerUp/jawOpen/visemes \u2014 no fake aliases) + clean Head/Neck bones. Hijab removes the hair-render gamble entirely. Face-swap (reporter_face) makes her photoreal + blends the muse seam. TODO: soften hijab fabric roughness (currently a touch satiny) via the EEVEE hair/cloth-roughness pass."
+    }
+  },
+  "garments": {}
+}

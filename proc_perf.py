@@ -76,7 +76,7 @@ env = _fit(env); cen = _fit(cen)
 t_sec = np.arange(T) / FPS
 
 # ---- blinks: Poisson-timed, realistic close/hold/open curve ----------------------
-SHAPE = np.array([0.0, 0.40, 1.0, 1.0, 0.62, 0.28, 0.08])   # ~7 frames @25fps (~0.28s)
+SHAPE = np.array([0.55, 1.0, 0.8, 0.3, 0.08])   # ~5f @25fps (~0.2s): snappy close, quick open (no slow hold/tail)
 blink = np.zeros(T)
 t = int(rng.uniform(0.5, 1.8) * FPS)
 while t < T:
@@ -187,6 +187,12 @@ if VISEMES:
         "mouthFunnel": C(0.35 * lo * speak),
         "mouthClose":  C(0.5 * (1-speak) * (1-jaw)),
     })
+else:
+    # GENTLE jaw under MuseTalk: even though muse owns the 2D mouth, a subtle 3D jaw/chin drop synced to
+    # loudness makes the head look like it's actually speaking (the mouth+jaw move together). Low gain so it
+    # never fights the muse inpaint. Renderer drives 'jawOpen' at a further-reduced weight.
+    _jaw = np.convolve(env, np.ones(5)/5, mode="same")
+    ch["jawOpen"] = C(np.clip(_jaw * 0.45 * JAWGAIN, 0.0, 0.6))
 nvis = sum(k in ch for k in ("jawOpen","aa","E","ou"))
 names = list(ch.keys())
 weights = [[ch[nm][fi] for nm in names] for fi in range(T)]

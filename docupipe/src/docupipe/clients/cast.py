@@ -8,7 +8,7 @@ from .. import config, cache
 
 BOT_OUT = "/srv/nvme-data/containers/live/studio/output"
 
-# voice refs are paths inside the qwen3dia container (/work/*). ref1=deep male narrator (reserved).
+# voice refs are paths inside the qwen3-tts server (amd1 voxserver) (/work/*). ref1=deep male narrator (reserved).
 # A small ENSEMBLE of experts with DISTINCT lenses, so interview cutaways add perspective/friction
 # rather than filler. The writers' room picks the speaker whose expertise fits each analysis beat.
 RESEARCHERS = [

@@ -25,7 +25,7 @@ seed = int(sys.argv[sys.argv.index("--seed")+1]) if "--seed" in sys.argv else 42
 allpcm, sr = [], None
 for i, t in enumerate(turns):
     body = json.dumps({"text": t, "seed": seed}).encode()
-    req = urllib.request.Request("http://localhost:8064/mono", data=body, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(os.environ.get("TTS_URL", "http://amd1:8064").rstrip("/") + "/mono", data=body, headers={"Content-Type": "application/json"})
     wav = urllib.request.urlopen(req, timeout=600).read()
     w = wave.open(io.BytesIO(wav)); sr = w.getframerate(); allpcm.append(w.readframes(w.getnframes()))
     allpcm.append(b'\x00\x00' * int(sr*0.35))

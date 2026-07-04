@@ -1,5 +1,5 @@
 """Synthesize an arbitrary line/script with the resident Qwen3-TTS (/mono) using ANY reference voice
-(--ref = a wav path inside the qwen3dia container's /work). Reuses the deterministic TTS normalizer and
+(--ref = a wav path inside the qwen3-tts server's /work, e.g. /work/ref1.wav on amd1). Reuses the deterministic TTS normalizer and
 the <=28-word turn split (avoids runaway). Used for the anchor and for distinct reporter/correspondent
 voices.  python3 newscast/synth_voice.py --text "..." [--ref /work/reporter_ref.wav] [--seed 11] --out out.wav
 """
@@ -23,7 +23,7 @@ if cur: turns.append(" ".join(cur))
 allpcm, sr = [], None
 for i, t in enumerate(turns):
     body = json.dumps({"text": t, "ref1": REF, "seed": SEED}).encode()
-    req = urllib.request.Request("http://localhost:8064/mono", data=body, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(os.environ.get("TTS_URL", "http://amd1:8064").rstrip("/") + "/mono", data=body, headers={"Content-Type": "application/json"})
     wav = urllib.request.urlopen(req, timeout=600).read()
     w = wave.open(io.BytesIO(wav)); sr = w.getframerate(); allpcm.append(w.readframes(w.getnframes()))
     allpcm.append(b'\x00\x00' * int(sr*0.35))

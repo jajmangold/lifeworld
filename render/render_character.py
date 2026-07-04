@@ -8,6 +8,8 @@ Env: NEWS_PANO (HDRI), ANCHOR_OUT (frame dir), NEWS_LENS/DIST/AIM/FSTOP/ENVSTR, 
 """
 import bpy, sys, os, math, json
 from mathutils import Vector, Euler
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # so sibling modules (graft_hair, fix_hair) import
+sys.path.insert(0, os.getcwd())
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 def a(f, d): return argv[argv.index(f) + 1] if f in argv else d
@@ -19,10 +21,13 @@ OUT = os.environ.get("ANCHOR_OUT", "/work/output/char_anim/")
 if not OUT.endswith("/"): OUT += "/"
 os.makedirs(OUT, exist_ok=True)
 
-# ARKit -> Rigify shape-key aliases (this rig has eye_close/brow_* not ARKit names)
-ALIAS = {"eyeBlinkLeft": ["eye_close.L"], "eyeBlinkRight": ["eye_close.R"],
-         "browInnerUp": ["brow_up.L", "brow_up.R"], "browOuterUpLeft": ["brow_up.L"],
-         "browOuterUpRight": ["brow_up.R"], "browDownLeft": ["brow_down.L"], "browDownRight": ["brow_down.R"]}
+# ARKit -> shape-key aliases. Covers Rigify/MakeHuman (eye_close/brow_*) AND HumGen FACS (eyeBlink_L,
+# browOuterUp_L, ...). targets() keeps only the names actually present, so one map serves every rig.
+ALIAS = {"eyeBlinkLeft": ["eye_close.L", "eyeBlink_L"], "eyeBlinkRight": ["eye_close.R", "eyeBlink_R"],
+         "browInnerUp": ["brow_up.L", "brow_up.R", "browInnerUp"],
+         "browOuterUpLeft": ["brow_up.L", "browOuterUp_L"], "browOuterUpRight": ["brow_up.R", "browOuterUp_R"],
+         "browDownLeft": ["brow_down.L", "browDown_L"], "browDownRight": ["brow_down.R", "browDown_R"],
+         "jawOpen": ["jawOpen", "jaw_open", "mouthOpen"]}
 # Rigify control bones for idle motion (vs viverse Avatar_Head/Neck/Spine)
 HEAD_B, NECK_B = "head", "neck"
 SPINE_B = ["spine", "spine.001", "spine.002", "spine.003"]
@@ -39,12 +44,54 @@ for nm in ["eyeBlinkLeft", "eyeBlinkRight", "browInnerUp", "browOuterUpLeft", "b
     base = pctl(col, 0.25 if nm in BLINK else 0.10)
     g = 2.7 if nm in BLINK else 0.5
     CURVE[nm] = [max(0.0, min(1.0, (v - base) * g)) for v in col]
+# gentle jaw under MuseTalk: proc_perf emits a low jawOpen envelope; drive it lightly so the chin/jaw moves
+# with speech (the mouth+jaw read as one) without fighting the 2D muse mouth. Absolute value, extra-tamed.
+if "jawOpen" in idx:
+    CURVE["jawOpen"] = [max(0.0, min(0.5, float(W[fi][idx["jawOpen"]]) * float(os.environ.get("NEWS_JAW", "0.7")))) for fi in range(NF)]
+
+# per-frame HEAD motion from the perf: proc_perf authors a natural, speech-aware, safety-clipped idle
+# (coherent drift + breathing + micro-saccades + emphasis nods on stressed peaks). Use it directly instead of
+# a hand-rolled sin wobble (which read as uncanny). cols = [pitch, yaw, roll] radians.
+HEAD = A.get("head"); HEAD_AMP = float(A.get("head_amp", 1.0)) * float(os.environ.get("NEWS_HEADAMP", "1.0"))
 
 bpy.ops.wm.open_mainfile(filepath=BLEND)
+if os.environ.get("NEWS_HAIRFIX"):               # de-plasticise hair/cloth materials (see fix_hair.py)
+    import fix_hair
+    _m = os.environ.get("NEWS_HAIRFIX_MATCH", "")
+    fix_hair.tune_hair_cloth(_m.split(",") if _m and _m != "1" else None,
+                             rough=ef("NEWS_HAIR_ROUGH", 0.7))
 sc = bpy.context.scene
 for o in list(bpy.data.objects):           # drop the asset's own cameras/lights; we set our own
     if o.type in ("CAMERA", "LIGHT"): bpy.data.objects.remove(o, do_unlink=True)
 arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+
+# --- robust bone resolution: rigs name head/neck/spine differently (head vs Head vs Avatar_Head);
+#     hardcoded lowercase names silently no-op'd idle motion on other rigs. Match flexibly. ---
+_bn = {b.name.lower(): b.name for b in arm.pose.bones}
+def _find_bone(cands):
+    for c in cands:
+        if c.lower() in _bn: return _bn[c.lower()]
+    for c in cands:
+        for ln, real in _bn.items():
+            if c.lower() in ln: return real
+    return None
+HEAD_B = _find_bone(["head", "avatar_head", "def-head", "spine.006"]) or HEAD_B
+NECK_B = _find_bone(["neck", "avatar_neck", "spine.004"]) or NECK_B
+_sp = [_find_bone([s]) for s in ["spine", "spine.001", "spine.002", "spine.003", "chest", "avatar_spine"]]
+SPINE_B = [b for b in dict.fromkeys(_sp) if b] or SPINE_B
+print("BONES head=%s neck=%s spine=%s" % (HEAD_B, NECK_B, SPINE_B))
+
+# --- optional HAAR hair graft (the flexible female-hair path); follows the head bone ---
+_groom = os.environ.get("NEWS_HAIR_GROOM", "")
+if _groom:
+    import graft_hair
+    graft_hair.graft(bpy, arm, _groom, HEAD_B,
+                     melanin=ef("NEWS_HAIR_MEL", "0.5"), yaw=ef("NEWS_HAIR_YAW", "0"))
+
+# optional lower-face slim (MakeHuman base meshes render 'chipmunk cheeks'; no cheek shape key exists)
+if ef("NEWS_FACE_SLIM", "0") > 0:
+    import slim_face
+    slim_face.slim(bpy, arm, amount=ef("NEWS_FACE_SLIM", "0"))
 
 # character extent + head world position (for framing)
 mn = Vector((1e9,)*3); mx = Vector((-1e9,)*3)
@@ -69,20 +116,26 @@ op = nt.nodes.new("ShaderNodeOutputWorld")
 nt.links.new(tc.outputs["Generated"], mp.inputs["Vector"]); nt.links.new(mp.outputs["Vector"], et.inputs["Vector"])
 nt.links.new(et.outputs["Color"], bg.inputs["Color"]); nt.links.new(bg.outputs["Background"], op.inputs["Surface"])
 
-# ---- soft key/fill (env does most of the work) ----
-def area(name, loc, energy, size):
+# ---- broadcast 3-point lighting on the FRONT (camera) side ----
+# BUG FIX: the old key/fill were placed at +Y (behind a character that faces -Y) so the face got no key light,
+# only ambient env -> flat. Place a proper warm key + cool fill on the camera side (front = side*Y) + a back
+# rim for separation. `side` (which way the character faces) must be known here, so compute it first.
+side = ef("NEWS_CAMSIDE", "-1")
+fy = 1.0 if side > 0 else -1.0                     # +Y is "front" for side>0, -Y for side<0
+def area(name, loc, energy, size, color=None):
     d = bpy.data.lights.new(name, "AREA"); d.energy = energy; d.size = size
+    if color: d.color = color
     o = bpy.data.objects.new(name, d); o.location = loc; sc.collection.objects.link(o)
     o.rotation_euler = (Vector((cx, cy, headw.z)) - Vector(loc)).normalized().to_track_quat('-Z', 'Y').to_euler()
-area("key", (cx - 0.6, cy + 1.6, headw.z + 0.2), 60, 1.4)
-area("fill", (cx + 0.7, cy + 1.4, headw.z), 25, 1.8)
+area("key",  (cx - 0.75, cy + fy * 1.5, headw.z + 0.35), ef("NEWS_KEY", "150"), 1.2, (1.0, 0.95, 0.88))  # warm key, front-high-left
+area("fill", (cx + 0.85, cy + fy * 1.4, headw.z + 0.0), ef("NEWS_FILL", "55"), 2.0, (0.90, 0.94, 1.0))   # cool soft fill, front-right
+area("rim",  (cx + 0.5,  cy - fy * 1.3, headw.z + 0.55), ef("NEWS_RIM", "90"), 0.7)                       # back rim for separation
 
 # ---- camera: MCU on the head, facing -Y (character faces +Y) ----
 cd = bpy.data.cameras.new("cam"); cd.lens = ef("NEWS_LENS", "85")
 cam = bpy.data.objects.new("cam", cd); sc.collection.objects.link(cam)
 H = topz - mn.z
 # character facing: BlenderKit/Rigify faces -Y (camera on -Y looking +Y); viverse faces +Y. NEWS_CAMSIDE=-1|+1
-side = ef("NEWS_CAMSIDE", "-1")
 camy = (mx.y + H * ef("NEWS_DIST", "0.42")) if side > 0 else (mn.y - H * ef("NEWS_DIST", "0.42"))
 cam.location = (cx, camy, headw.z - H * ef("NEWS_AIM", "0.02"))
 cam.rotation_euler = (math.radians(90), 0, math.radians(180 if side > 0 else 0)); cd.shift_x = ef("NEWS_SHIFTX", "0.0")
@@ -98,6 +151,17 @@ for o in bpy.data.objects:
 def targets(nm):
     return [nm] if nm in kb_by else [t for t in ALIAS.get(nm, []) if t in kb_by]
 
+# CRITICAL: MakeHuman/Rigify rigs DRIVE these shape keys from eyelid/brow bones (SK-eyelid, etc.). A driver
+# overrides our keyframed kb.value EVERY frame, so blinks AND brows silently do nothing (the shape has real
+# deformation — verified — but the driver pins it to rest). Remove drivers on the keys we drive so keyframes apply.
+_drive = set(t for nm in CURVE for t in targets(nm))
+for o in bpy.data.objects:
+    if o.type == "MESH" and o.data.shape_keys:
+        for tn in _drive:
+            try: o.data.shape_keys.driver_remove('key_blocks["%s"].value' % tn)
+            except Exception: pass
+print("BLINK/BROW drivers removed for:", sorted(_drive))
+
 sc.render.fps = int(round(FPS)); sc.frame_start = 1; sc.frame_end = NF
 sc.render.film_transparent = True
 sc.render.image_settings.file_format = "PNG"; sc.render.image_settings.color_mode = "RGBA"
@@ -106,25 +170,45 @@ try: sc.render.engine = "BLENDER_EEVEE_NEXT"
 except Exception: sc.render.engine = "BLENDER_EEVEE"
 sc.eevee.taa_render_samples = 64
 
+# ---- SELF-FACE swap source: a frontal head close-up rendered with THIS shot's EXACT world + lights (same
+#      renderer, same HDRI/tone), so when make_anchor face-swaps the character with its OWN face the source
+#      tone matches the scene -> no identity mismatch, no swap seam. Rendered here at REST (before the
+#      expression keyframing below) so it's neutral + eyes-open. Toggle with NEWS_SELF_FACE=0. ----
+if os.environ.get("NEWS_SELF_FACE", "1") == "1":
+    sfd = bpy.data.cameras.new("sfcam"); sfd.lens = 95
+    sfc = bpy.data.objects.new("sfcam", sfd); sc.collection.objects.link(sfc)
+    sft = headw + Vector((0, 0, 0.11))
+    sfc.location = sft + (Vector((0, 0.85, 0)) if side > 0 else Vector((0, -0.85, 0)))
+    sfc.rotation_euler = (sft - sfc.location).to_track_quat('-Z', 'Y').to_euler()
+    _fp, _rx, _ry, _ft, _c0 = sc.render.filepath, sc.render.resolution_x, sc.render.resolution_y, sc.render.film_transparent, sc.camera
+    sc.camera = sfc; sc.render.resolution_x = sc.render.resolution_y = 1024; sc.render.film_transparent = False
+    sc.render.filepath = OUT + "self_face.png"; bpy.ops.render.render(write_still=True)
+    sc.camera, sc.render.resolution_x, sc.render.resolution_y, sc.render.film_transparent, sc.render.filepath = _c0, _rx, _ry, _ft, _fp
+    bpy.data.objects.remove(sfc, do_unlink=True)
+    print("SELF_FACE_RENDERED ->", OUT + "self_face.png")
+
 for fi in range(NF):
     f = fi + 1; t = fi / FPS
     for nm, col in CURVE.items():
         for tn in targets(nm):
             for kb in kb_by[tn]: kb.value = col[fi]; kb.keyframe_insert("value", frame=f)
     hd = arm.pose.bones.get(HEAD_B); nk = arm.pose.bones.get(NECK_B)
-    breath = math.sin(2 * math.pi * 0.25 * t) * 0.01
+    # HEAD motion from the perf's authored idle (natural, speech-aware, clipped) — NOT a raw sin wobble.
+    ph, yw, rl = (HEAD[fi] if (HEAD and fi < len(HEAD)) else (0.0, 0.0, 0.0))
+    ph *= HEAD_AMP; yw *= HEAD_AMP; rl *= HEAD_AMP
+    breath = math.sin(2 * math.pi * 0.25 * t) * 0.008        # just breathing on the spine (subtle)
     for b in SPINE_B:
         pb = arm.pose.bones.get(b)
-        if pb: pb.rotation_mode = "XYZ"; pb.rotation_euler = Euler((breath, 0, math.sin(2*math.pi*0.16*t)*0.005), "XYZ"); pb.keyframe_insert("rotation_euler", frame=f)
-    if hd: hd.rotation_mode = "XYZ"; hd.rotation_euler = Euler((math.sin(2*math.pi*0.17*t)*0.02, 0, math.sin(2*math.pi*0.21*t+0.5)*0.02), "XYZ"); hd.keyframe_insert("rotation_euler", frame=f)
-    if nk: nk.rotation_mode = "XYZ"; nk.rotation_euler = Euler((math.sin(2*math.pi*0.21*t+0.5)*0.012, 0, 0), "XYZ"); nk.keyframe_insert("rotation_euler", frame=f)
+        if pb: pb.rotation_mode = "XYZ"; pb.rotation_euler = Euler((breath, 0, 0), "XYZ"); pb.keyframe_insert("rotation_euler", frame=f)
+    if hd: hd.rotation_mode = "XYZ"; hd.rotation_euler = Euler((ph, yw, rl), "XYZ"); hd.keyframe_insert("rotation_euler", frame=f)
+    if nk: nk.rotation_mode = "XYZ"; nk.rotation_euler = Euler((ph * 0.4, yw * 0.4, 0), "XYZ"); nk.keyframe_insert("rotation_euler", frame=f)
 print("KEYED", NF, "frames")
 
 # render env background once (character hidden) -> bg.png, then the character (transparent)
 sc.render.film_transparent = False
 vis = {o: o.hide_render for o in bpy.data.objects}
 for o in bpy.data.objects:
-    if o.type == "MESH": o.hide_render = True
+    if o.type in ("MESH", "CURVE", "CURVES"): o.hide_render = True   # incl. grafted hair curve
 sc.render.filepath = OUT + "bg.png"; bpy.ops.render.render(write_still=True)
 for o, h in vis.items(): o.hide_render = h
 sc.render.film_transparent = True

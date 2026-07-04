@@ -6,9 +6,9 @@
 set -euo pipefail
 LINE="${1:-theo_0}"
 SAMPL=/srv/nvme-data/containers/projects/sampl
-docker run --rm -v "$SAMPL":/work -v "$SAMPL/tools/TalkSHOW":/ts -v /srv/nvme-data/containers/projects/bot:/lw \
+docker run --rm -v "$SAMPL":/work -v "$SAMPL/tools/TalkSHOW":/ts -v /srv/nvme-data/containers/live/studio:/lw \
   -e PYTHONPATH=/ts/pydeps -e HF_HOME=/ts/hf-cache sampl:dev bash -lc \
   "\$SAMPL_VENV/bin/python /lw/render/viseme_probe.py --wav /work/output/scene/$LINE.wav \
    --arkit /work/output/scene/$LINE.arkit.json --out /work/output/scene/probe_$LINE.png" | grep -E "VOWEL_LAG|PROBE_OK"
-cp "$SAMPL/output/scene/probe_$LINE.png" /srv/nvme-data/containers/projects/bot/output/probe_$LINE.png
+cp "$SAMPL/output/scene/probe_$LINE.png" /srv/nvme-data/containers/live/studio/output/probe_$LINE.png
 echo "-> output/probe_$LINE.png"

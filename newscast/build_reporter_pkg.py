@@ -10,7 +10,7 @@ Runs on the HOST (drives make_anchor.sh + the mp-extract container), like factor
 """
 import sys, os, subprocess, re
 
-BOT = "/srv/nvme-data/containers/projects/bot"
+BOT = "/srv/nvme-data/containers/live/studio"
 os.chdir(BOT)
 def arg(f, d=None): return sys.argv[sys.argv.index(f)+1] if f in sys.argv else d
 AUDIO = arg("--audio"); OUT = arg("--out", "output/reporter_pkg.mp4")

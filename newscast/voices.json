@@ -1,0 +1,37 @@
+{
+  "anchorF": {
+    "name": "Vivian Vale",
+    "method": "clone",
+    "ref": "ref_news.wav",
+    "txt": "ref_news.txt",
+    "tp": 0.5
+  },
+  "anchorM": {
+    "name": "Hank Calloway",
+    "method": "clone",
+    "ref": "cast_hank.wav",
+    "txt": "cast_hank.txt",
+    "tp": 1.05
+  },
+  "weatherF": {
+    "name": "Marisol Vega",
+    "method": "cv",
+    "speaker": "sohee",
+    "instruct": "a bright bubbly female weather presenter, fun and warm but crisp and clear on the forecast",
+    "tp": 0.8
+  },
+  "sportsM": {
+    "name": "Kai Brooks",
+    "method": "clone",
+    "ref": "cast_kai.wav",
+    "txt": "cast_kai.txt",
+    "tp": 0.6
+  },
+  "sportsF": {
+    "name": "Brooke Sands",
+    "method": "cv",
+    "speaker": "ono_anna",
+    "instruct": "a laid-back cool easygoing young female surfer sports anchor, relaxed and chill, effortlessly casual, subtly funny and a little deadpan",
+    "tp": 0.8
+  }
+}

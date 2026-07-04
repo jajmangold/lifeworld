@@ -1,5 +1,5 @@
 #!/bin/bash
-# Composite the FFNN graphics package over a finished 1440p anchor clip, with animation:
+# Composite the NNS graphics package over a finished 1440p anchor clip, with animation:
 #  - bug (top-right, static)
 #  - lower-third (slides in from left ~1s, slides out near end)
 #  - ticker: static bar + scrolling headlines (behind the LIVE tab) + time box + clock
@@ -7,7 +7,7 @@
 #   broadcast_finish.sh <in.mp4> <out.mp4> [music.mp3]
 set -e
 IN=$1; OUT=$2; MUSIC=$3
-BOT=/srv/nvme-data/containers/projects/bot; cd "$BOT"
+BOT=/srv/nvme-data/containers/live/studio; cd "$BOT"
 G=output
 DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$IN")
 TW=$(ffprobe -v error -select_streams v -show_entries stream=width -of csv=p=0 "$G/gfx_ticker_text.png")

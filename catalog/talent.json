@@ -1,19 +1,20 @@
 {
   "graham_pierce": {
     "role": "anchor", "name": "Graham Pierce",
-    "voice_ref": "/work/ref1.wav", "voice_engine": "qwen3dia",
+    "voice_ref": "/work/ref1.wav", "voice_engine": "qwen3tts",
     "avatar": "viverse_avatar/avatar.glb", "headtex": "viverse_avatar/anchorM_klein_head.png",
     "face": "output/anchorM.png",
     "lower_third": {"kicker": "NNS NEWSDESK", "title": "NNS ANCHOR"}
   },
   "elise_warren": {
     "role": "reporter", "name": "Elise Warren",
-    "voice_ref": "/work/reporter_ref.wav", "voice_engine": "qwen3dia",
-    "avatar": "TBD_blenderkit", "face": "output/reporter_face.png",
+    "voice_ref": "/work/reporter_ref.wav", "voice_engine": "qwen3tts",
+    "avatar": "wardrobe:business_female", "face": "output/reporter_face.png",
+    "hair": {"groom": "bob_short", "melanin": 0.4, "face_slim": 0.35},
     "lower_third": {"kicker": "ON THE SCENE", "title": "NNS CORRESPONDENT"}
   },
   "docuseries_narrator": {
     "role": "narrator", "name": "Narrator",
-    "voice_ref": "/work/ref1.wav", "voice_engine": "qwen3dia", "avatar": null
+    "voice_ref": "/work/ref1.wav", "voice_engine": "qwen3tts", "avatar": null
   }
 }

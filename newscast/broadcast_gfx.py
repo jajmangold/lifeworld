@@ -1,9 +1,9 @@
-"""Generate the FFNN broadcast graphics-package elements (1440p) as RGBA PNGs:
+"""Generate the NNS broadcast graphics-package elements (1440p) as RGBA PNGs:
   bug.png         corner network logo
   lower_third.png anchor name + title bar (slides in)
-  ticker_bg.png   bottom ticker bar (FFNN tab + accent + time box bg)
+  ticker_bg.png   bottom ticker bar (NNS tab + accent + time box bg)
   ticker_text.png long transparent strip of the scrolling headlines
-Reads output/news_package.json. Run in mp-extract (PIL+numpy). Colors = FFNN blue.
+Reads output/news_package.json. Run in mp-extract (PIL+numpy). Colors = NNS blue.
   python3 broadcast_gfx.py
 """
 import json, os

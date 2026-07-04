@@ -1,0 +1,199 @@
+<title>SDNQ LTX-2.3 on the Volta rig — system map</title>
+<style>
+  :root{
+    --ground:#0d1117; --panel:#161b22; --panel2:#1b222c; --line:#2a323d;
+    --ink:#e6edf3; --muted:#8b97a6; --faint:#5b6672;
+    --teal:#4fd1c5; --teal-dim:#2b6f69; --amber:#e3a008; --red:#c9515b; --violet:#a78bfa;
+    --mono:ui-monospace,SFMono-Regular,Menlo,"Cascadia Code",Consolas,monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.55;-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(60rem 40rem at 82% -10%,rgba(79,209,197,.06),transparent 60%);}
+  .wrap{max-width:1040px;margin:0 auto;padding:clamp(1.4rem,4vw,3.5rem) clamp(1rem,3vw,2rem) 5rem}
+  a{color:var(--teal)}
+  h1,h2,h3{text-wrap:balance;margin:0}
+  .mono{font-family:var(--mono)}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--teal);font-weight:600}
+  .muted{color:var(--muted)} .faint{color:var(--faint)}
+  .num{font-variant-numeric:tabular-nums}
+
+  /* header */
+  header{border-bottom:1px solid var(--line);padding-bottom:1.8rem;margin-bottom:2.2rem}
+  h1{font-size:clamp(1.7rem,4.4vw,2.7rem);letter-spacing:-.02em;line-height:1.08;margin:.5rem 0 .7rem}
+  h1 .hl{color:var(--teal)}
+  .dek{color:var(--muted);max-width:64ch;font-size:1.02rem}
+  .stats{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1.4rem}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.6rem .85rem;min-width:8.5rem}
+  .stat .k{font-family:var(--mono);font-size:1.28rem;color:var(--ink);letter-spacing:-.01em}
+  .stat .k.win{color:var(--teal)} .stat .k.warn{color:var(--amber)}
+  .stat .l{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:.15rem}
+
+  section{margin-top:2.6rem}
+  h2{font-size:1.16rem;letter-spacing:-.01em;display:flex;align-items:baseline;gap:.7rem}
+  h2 .n{font-family:var(--mono);font-size:.8rem;color:var(--teal-dim);font-weight:700}
+  .sub{color:var(--muted);font-size:.92rem;margin:.35rem 0 1.1rem;max-width:70ch}
+
+  /* rig */
+  .rig{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1.1rem;overflow-x:auto}
+  .riglabel{font-family:var(--mono);font-size:.7rem;color:var(--faint);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.7rem}
+  .cards{display:grid;grid-template-columns:repeat(8,minmax(64px,1fr));gap:.4rem;min-width:640px}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:.5rem .45rem;font-family:var(--mono);font-size:.68rem;position:relative;min-height:74px}
+  .card .idx{color:var(--faint);font-size:.62rem}
+  .card .role{margin-top:.3rem;font-size:.7rem;line-height:1.25}
+  .card .mem{color:var(--faint);font-size:.62rem;margin-top:.25rem}
+  .card.active{border-color:var(--teal-dim);background:linear-gradient(180deg,rgba(79,209,197,.10),rgba(79,209,197,.02))}
+  .card.active .role{color:var(--teal)}
+  .card.idle .role{color:var(--faint)}
+  .legend{display:flex;flex-wrap:wrap;gap:1rem;margin-top:.9rem;font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+  .dot{display:inline-block;width:.62rem;height:.62rem;border-radius:3px;vertical-align:middle;margin-right:.35rem}
+  .wirebar{margin-top:.9rem;font-family:var(--mono);font-size:.72rem;color:var(--amber);display:flex;gap:.5rem;align-items:center}
+
+  /* flow */
+  .flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:.85rem .9rem}
+  .step .t{font-family:var(--mono);font-size:.7rem;color:var(--teal);letter-spacing:.04em}
+  .step .b{font-size:.86rem;color:var(--ink);margin-top:.3rem}
+  .step .m{font-family:var(--mono);font-size:.68rem;color:var(--faint);margin-top:.45rem}
+  .step.cond{border-color:var(--teal-dim)}
+
+  /* table */
+  .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+  table{border-collapse:collapse;width:100%;min-width:560px;font-size:.87rem}
+  th,td{text-align:left;padding:.62rem .8rem;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600;background:var(--panel2)}
+  tbody tr:last-child td{border-bottom:none}
+  td.mono,th.mono{font-family:var(--mono)}
+  .tag{font-family:var(--mono);font-size:.68rem;padding:.12rem .5rem;border-radius:999px;white-space:nowrap;border:1px solid}
+  .tag.win{color:var(--teal);border-color:var(--teal-dim);background:rgba(79,209,197,.08)}
+  .tag.warn{color:var(--amber);border-color:#5c4708;background:rgba(227,160,8,.08)}
+  .tag.dead{color:var(--red);border-color:#5a2b30;background:rgba(201,81,91,.08)}
+  .tag.hold{color:var(--violet);border-color:#3f3468;background:rgba(167,139,250,.08)}
+
+  /* measurements */
+  .meas{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.7rem}
+  .mrow{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:.8rem .9rem;display:flex;justify-content:space-between;align-items:baseline;gap:.8rem}
+  .mrow .lbl{font-size:.82rem;color:var(--muted)}
+  .mrow .val{font-family:var(--mono);font-size:1.05rem;color:var(--ink);white-space:nowrap}
+  .mrow .val em{font-style:normal;color:var(--teal)}
+  .mrow .val em.w{color:var(--amber)}
+
+  /* scripts */
+  .files{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:.6rem}
+  .file{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:.8rem .9rem}
+  .file .fn{font-family:var(--mono);font-size:.84rem;color:var(--ink)}
+  .file .fn .ext{color:var(--faint)}
+  .file .fd{font-size:.8rem;color:var(--muted);margin-top:.3rem}
+  .file .fns{font-family:var(--mono);font-size:.68rem;color:var(--teal-dim);margin-top:.45rem}
+  .foot{margin-top:2.6rem;border-top:1px solid var(--line);padding-top:1.2rem;color:var(--faint);font-size:.8rem;font-family:var(--mono)}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">System map · Volta mining rig · sm_70</div>
+    <h1>Photoreal <span class="hl">LTX-2.3</span> on cards that were<br>never supposed to run it</h1>
+    <p class="dek">A 22-billion-parameter audio-video diffusion transformer, generating broadcast-photoreal
+      video on a single 16&nbsp;GB <span class="mono">CMP 100-210</span> — a Volta-class mining GPU with no bf16
+      tensor cores, no NVENC, and every card wired at PCIe&nbsp;Gen1&nbsp;×1. The unlock is SDNQ int4 + on-card
+      component placement.</p>
+    <div class="stats">
+      <div class="stat"><div class="k win">12.3<span class="faint" style="font-size:.8rem"> GB</span></div><div class="l">Peak VRAM / card</div></div>
+      <div class="stat"><div class="k win">41<span class="faint" style="font-size:.8rem"> s</span></div><div class="l">Resident window (was 263)</div></div>
+      <div class="stat"><div class="k warn">0.2<span class="faint" style="font-size:.8rem"> GB/s</span></div><div class="l">PCIe Gen1 ×1</div></div>
+      <div class="stat"><div class="k">768×448</div><div class="l">Full-res, arbitrary length</div></div>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="n">01</span> The rig &amp; the placement</h2>
+    <p class="sub">16 GPUs (11× CMP 100-210, 4× Tesla V100, 1× K620), each on a Gen1 ×1 riser. The pipeline's four
+      heavy components each get their own card so nothing offloads to CPU and the transformer never reloads.
+      The DiT gets a card to itself — it needs the whole 16&nbsp;GB for activations.</p>
+    <div class="rig">
+      <div class="riglabel">Resident placement — one component per card</div>
+      <div class="cards">
+        <div class="card active"><div class="idx">cuda:0</div><div class="role">DiT<br>int4</div><div class="mem">11.5 GB + acts</div></div>
+        <div class="card active"><div class="idx">cuda:1</div><div class="role">Gemma-3<br>encoder</div><div class="mem">8.3 GB · resident</div></div>
+        <div class="card active"><div class="idx">cuda:2</div><div class="role">connectors</div><div class="mem">6.3 GB</div></div>
+        <div class="card active"><div class="idx">cuda:3</div><div class="role">VAE +<br>audio</div><div class="mem">1.4 GB</div></div>
+        <div class="card idle"><div class="idx">4–15</div><div class="role">idle<br>/ parallel</div><div class="mem">×12 free</div></div>
+        <div class="card idle"><div class="idx">·</div><div class="role">·</div><div class="mem">fan-out</div></div>
+        <div class="card idle"><div class="idx">·</div><div class="role">·</div><div class="mem">N clips</div></div>
+        <div class="card idle"><div class="idx">·</div><div class="role">·</div><div class="mem">at once</div></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--teal)"></span>active component (resident)</span>
+        <span><span class="dot" style="background:var(--panel2);border:1px solid var(--line)"></span>idle — throughput headroom</span>
+      </div>
+      <div class="wirebar"><span>⟶ x1 crossings per window:</span>
+        <span class="faint">embeds (~1 MB) · connector cond (~small) · latents→VAE (few MB)</span>
+        <span>— tiny &amp; rare, so ×1 is a non-issue</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">02</span> Generation flow — temporal windowing</h2>
+    <p class="sub">One card can't hold the DiT's activations for a whole 5-second clip, so it's generated in
+      windows. Each window after the first is conditioned on the previous window's tail frames
+      (<span class="mono">LTX2VideoCondition</span>) so the seams stay coherent. Prompt embeds are encoded once
+      and reused across every window.</p>
+    <div class="flow">
+      <div class="step"><div class="t">encode ×1</div><div class="b">Gemma → connectors build the text conditioning, cached for the whole clip</div><div class="m">on cuda:1/2, resident</div></div>
+      <div class="step"><div class="t">window 0 · t2v</div><div class="b">Denoise the first N frames from noise — no conditioning</div><div class="m">8 steps · ~1.9 s/step</div></div>
+      <div class="step cond"><div class="t">window k · conditioned</div><div class="b">Pin the previous window's tail frames at index 0, denoise N more, drop the overlap</div><div class="m">continuity anchor</div></div>
+      <div class="step"><div class="t">stitch → decode</div><div class="b">Concatenate windows, VAE-decode (tiled) to frames</div><div class="m">→ mp4</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">03</span> Paths explored — the ledger</h2>
+    <p class="sub">Every route to fitting a 22B video DiT on this hardware, and where each landed.</p>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>Path</th><th>Idea</th><th class="mono">DiT / card</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">GGUF Q3/Q4</td><td>ComfyUI-GGUF quantized unet</td><td class="mono">~14 GB fp16</td><td><span class="tag dead">dead</span> sm_70 has no quant kernels → dequants to fp16, OOMs</td></tr>
+          <tr><td class="mono">SDNQ int4 · 1 card</td><td>pre-quantized int4 diffusers pipeline</td><td class="mono">11.5 GB</td><td><span class="tag win">works</span> photoreal; short clips only</td></tr>
+          <tr><td class="mono">+ windowed</td><td>temporal windows w/ tail conditioning</td><td class="mono">11.5 GB</td><td><span class="tag win">works</span> any length, full-res — but slow on CPU-offload</td></tr>
+          <tr><td class="mono">+ resident</td><td>each component on its own card, no offload</td><td class="mono">11.5 GB</td><td><span class="tag win">works · 6.4× faster</span> window 263 s → 41 s</td></tr>
+          <tr><td class="mono">mesh · fp8</td><td>split the DiT across 2 cards (Daedalus)</td><td class="mono">~28 GB</td><td><span class="tag warn">poor fit</span> fp8 front-half &gt;16 GB; wire only ~6 s/clip</td></tr>
+          <tr><td class="mono">mesh · SDNQ</td><td>split the int4 DiT 24/24 blocks</td><td class="mono">5.75 GB</td><td><span class="tag hold">escalation</span> best headroom; needs SDNQ→comfy loader work</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">04</span> What the hardware actually measured</h2>
+    <p class="sub">The surprises were all about <em>where</em> the time and memory went — the 22B transformer was
+      never the bottleneck.</p>
+    <div class="meas">
+      <div class="mrow"><span class="lbl">Transformer denoise, 8 steps</span><span class="val"><em>15 s</em></span></div>
+      <div class="mrow"><span class="lbl">Gemma encode — on CPU (offload)</span><span class="val"><em class="w">230 s</em></span></div>
+      <div class="mrow"><span class="lbl">Gemma encode — resident on GPU</span><span class="val"><em>~sec</em></span></div>
+      <div class="mrow"><span class="lbl">VAE decode</span><span class="val">~83 s</span></div>
+      <div class="mrow"><span class="lbl">PCIe Gen1 ×1, one 33 MB hop</span><span class="val"><em class="w">~0.2 s</em></span></div>
+      <div class="mrow"><span class="lbl">Mesh wire, full 8-step clip</span><span class="val">~6.4 s</span></div>
+      <div class="mrow"><span class="lbl">bf16 = correct · fp16 = NaN/black</span><span class="val">Volta range</span></div>
+      <div class="mrow"><span class="lbl">Resident window (17f @768)</span><span class="val"><em>41 s</em></span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">05</span> The code — trailmark inventory</h2>
+    <p class="sub">Seven scripts, 19 functions, 141 call edges (deps: torch · sdnq · diffusers · comfy). The
+      lineage runs left-to-right from first proof to the resident production path.</p>
+    <div class="files">
+      <div class="file"><div class="fn">ltx_pilot<span class="ext">.py</span></div><div class="fd">First proof — ComfyUI node classes headless; found the GGUF-fp16 wall</div><div class="fns">call · vram</div></div>
+      <div class="file"><div class="fn">sdnq_pilot<span class="ext">.py</span></div><div class="fd">SDNQ int4 diffusers pipeline — the memory-wall break, photoreal frame</div><div class="fns">vram · to_img</div></div>
+      <div class="file"><div class="fn">sdnq_cached<span class="ext">.py</span></div><div class="fd">Cache prompt embeds once (task #13) — bypass the 230 s gemma encode</div><div class="fns">_wrap · cb · to_img</div></div>
+      <div class="file"><div class="fn">sdnq_long<span class="ext">.py</span></div><div class="fd">Temporal windowing — full-res 5 s clip on one card (CPU-offload)</div><div class="fns">gen · _wrap</div></div>
+      <div class="file"><div class="fn">sdnq_long_resident<span class="ext">.py</span></div><div class="fd">Per-card placement + align wrappers — the 6.4× resident speedup</div><div class="fns">align · gen · wrap_method · _mv</div></div>
+      <div class="file"><div class="fn">sdnq_mgpu<span class="ext">.py</span></div><div class="fd">Multi-card component split — device_map vs manual placement</div><div class="fns">align · to_img</div></div>
+      <div class="file"><div class="fn">drive_sdnq<span class="ext">.py</span></div><div class="fd">ComfyUI HTTP driver for the patched SDNQ Sampler node</div><div class="fns">graph · post · wait</div></div>
+    </div>
+  </section>
+
+  <div class="foot">mapped with trailmark v0.3.1 · sm_70 · SDNQ int4 · LTX-2.3 distilled · rig @ Gen1 ×1</div>
+</div>

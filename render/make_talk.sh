@@ -13,7 +13,7 @@ GPU="${3:-7}"
 FPS=24
 
 SAMPL=/srv/nvme-data/containers/projects/sampl
-BOT=/srv/nvme-data/containers/projects/bot
+BOT=/srv/nvme-data/containers/live/studio
 OUT=$SAMPL/output
 TEX=/work/assets/smplx_texture_f_alb_eyefix.png    # CONTAINER path (sampl mounted at /work); clothed + patched eye
 

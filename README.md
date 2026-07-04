@@ -1,3 +1,6 @@
+<!-- ⚠️ ASPIRATIONAL / EARLY-VISION DOC (SMPL-X-centric "lifeworld"). This is NOT the current state.
+     For what actually exists and how to work here, read studio/AGENTS.md (and the per-area AGENTS.md). -->
+
 # lifeworld
 
 Autonomous SMPL-X **humans that live lives** in a simulated world, remember

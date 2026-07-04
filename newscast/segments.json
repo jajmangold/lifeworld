@@ -1,0 +1,123 @@
+[
+  {
+    "id": "00_intro",
+    "emotion": "neutral",
+    "e_cfg": 1.0,
+    "lower_third": "NNS  \u00b7  Vivian Vale",
+    "speaker": "anchorF",
+    "text": "Good evening. Tonight, the death toll climbs past nine hundred after two massive earthquakes flatten parts of Venezuela. American warplanes strike Iran as a fragile ceasefire teeters on the edge. And a record-shattering heat wave bakes Europe weeks before summer was supposed to peak. There is a lot to get to, so let's begin. Good evening, and welcome to N N S. I'm Vivian Vale, and this is your A-I news report for Saturday, June twenty-seventh, twenty twenty-six. Now, let's get to it."
+  },
+  {
+    "id": "01_venezuela",
+    "emotion": "sad",
+    "e_cfg": 1.3,
+    "lower_third": "VENEZUELA  \u00b7  Powerful quakes kill 920",
+    "speaker": "anchorF",
+    "text": "We begin tonight with a tragedy of staggering scale in South America. The death toll in Venezuela has now climbed to at least nine hundred and twenty people, with more than four thousand five hundred injured, after two enormous earthquakes struck the country's northwest within the span of just thirty-nine seconds on Wednesday. The first quake registered a magnitude of seven point two, followed almost immediately by a seven point five mainshock, the strongest to hit Venezuela since nineteen hundred. The destruction is concentrated in Caracas and the coastal city of La Guaira, where more than two hundred and fifty buildings have collapsed. For a country already strained by years of crisis, this is a catastrophe layered upon hardship, and the human toll is still being counted.",
+    "image": "img_01_venezuela.png"
+  },
+  {
+    "id": "02_iran",
+    "emotion": "neutral",
+    "e_cfg": 1.1,
+    "lower_third": "MIDDLE EAST  \u00b7  U.S. strikes Iran",
+    "speaker": "anchorM",
+    "text": "Thanks, Vivian. Turning now to a dangerous escalation in the Middle East. The United States struck Iran on Friday, with Central Command confirming that American aircraft hit Iranian missile and drone storage sites and coastal radar installations near the southern port of Sirik. The strikes came in direct response to an attack a day earlier on a Singapore-flagged cargo ship hit by a drone while passing through the Strait of Hormuz. President Trump called it a violation of the fragile ceasefire framework agreed just over a week ago, and Iran's Revolutionary Guard answered with attacks on U.S. military installations, warning its response would be, quote, more extensive than this. It marks the most serious test yet of an agreement that, just ten days ago, raised hopes of a lasting calm.",
+    "image": "wiki_02_iran.jpg"
+  },
+  {
+    "id": "03_starmer",
+    "emotion": "neutral",
+    "e_cfg": 1.0,
+    "lower_third": "UNITED KINGDOM  \u00b7  Starmer resigns",
+    "speaker": "anchorF",
+    "text": "Our next story comes from across the Atlantic, where a political earthquake of a different kind has reshaped Britain. Keir Starmer has resigned as Prime Minister of the United Kingdom, making him the latest casualty in a stretch of extraordinary political turbulence. He will become his country's seventh leader in a decade. Starmer announced his decision early Monday, less than two years after leading the Labour Party back to power in a landslide. But that mandate eroded quickly, with months of pressure from his own party, dismal council election results in May, and the rapid rise of the far-right Reform U-K party all closing in. His chief rival, Andy Burnham, the popular former mayor of Greater Manchester, is now the overwhelming favorite to succeed him.",
+    "image": "wiki_03_starmer.jpg"
+  },
+  {
+    "id": "04_bolton",
+    "emotion": "neutral",
+    "e_cfg": 1.0,
+    "lower_third": "WASHINGTON  \u00b7  Bolton pleads guilty",
+    "speaker": "anchorM",
+    "text": "Now to a major legal story here at home. John Bolton, the former national security adviser during President Trump's first term, pleaded guilty on Friday to one felony count of illegally retaining national defense information. Appearing in federal court in Greenbelt, Maryland, Bolton admitted to keeping classified material in his personal diaries. He had originally faced eighteen counts. Under the terms of the plea agreement, prosecutors will not seek a sentence longer than sixty months, and Bolton has agreed to forfeit roughly two point two million dollars. His sentencing is set for October twenty-eighth. It's a striking fall for a man who was once among the most powerful voices in American foreign policy.",
+    "image": "wiki_04_bolton.jpg"
+  },
+  {
+    "id": "05_fed",
+    "emotion": "neutral",
+    "e_cfg": 1.0,
+    "lower_third": "MARKETS  \u00b7  Fed holds, signals hawkish turn",
+    "speaker": "anchorM",
+    "text": "Our top business story tonight takes us to Wall Street and the Federal Reserve. At his first meeting as the Fed's new chairman, Kevin Warsh led the central bank in voting unanimously to hold interest rates steady, keeping the benchmark range at three and a half to three and three-quarters percent. But while rates didn't move, the message did. Fed officials sharply raised their projections, a hawkish flip that suggests the next move could be a hike rather than a cut, with some traders now anticipating that increase could come as early as October. Even so, markets have remained resilient, with the S and P five hundred trading near an all-time high. For American households and borrowers, the takeaway is clear: relief on rates may have to wait.",
+    "image": "img_05_fed.png"
+  },
+  {
+    "id": "06_openai",
+    "emotion": "happy",
+    "e_cfg": 1.1,
+    "lower_third": "TECHNOLOGY  \u00b7  OpenAI unveils first chip",
+    "speaker": "anchorF",
+    "text": "Now to some brighter news. Turning now to technology, where the race to power artificial intelligence reached a milestone this week. OpenAI, the company behind ChatGPT, unveiled its very first custom-designed chip, built in partnership with Broadcom. It is purpose-built for inference, the heavy computing work that lets A-I systems answer your questions in real time. What's turning heads is the speed and the savings. The companies say the chip went from initial design to manufacturing in just nine months, aided in part by OpenAI's own models helping to design it, and early testing suggests it delivers far better performance per watt at roughly half the cost of typical A-I graphics processors. The move signals a broader shift across the industry, and it could reshape the economics of artificial intelligence for years to come.",
+    "image": "img_06_openai.png"
+  },
+  {
+    "id": "07_heat",
+    "emotion": "sad",
+    "e_cfg": 1.2,
+    "lower_third": "CLIMATE  \u00b7  Record heat bakes Europe",
+    "speaker": "anchorM",
+    "text": "Our climate story tonight: Europe is sweltering under a historic and dangerously early heat wave. In the days around the summer solstice, temperatures soared as much as eighteen degrees Celsius above normal, shattering records across the continent. France recorded its hottest day ever, and on Friday, Germany set a new all-time national high of forty-one point three degrees Celsius, that's over one hundred and six degrees Fahrenheit. Weather services from Berlin to Prague have issued red alerts for extreme fire danger as drought deepens. Scientists are blunt about the cause, attributing the intensity and the unusually early timing largely to human-driven climate change, noting that Europe has been warming at twice the global average since the nineteen-eighties. It is, once again, a preview of summers to come. And it isn't only Europe feeling it. Marisol, what are we looking at here at home?",
+    "image": "img_07_heat.png"
+  },
+  {
+    "id": "08_weather",
+    "emotion": "happy",
+    "e_cfg": 1.1,
+    "lower_third": "FORECAST  \u00b7  Marisol Vega  \u00b7  Chicago",
+    "speaker": "weatherF",
+    "text": "Thanks, Hank! Oh, you have no idea. Today around Chicago and the northwest suburbs, including Barrington Hills, look for highs near the upper eighties, hot and humid, with a stray afternoon storm. But here's the headline: an extreme heat watch hits Monday. We could near one hundred and four Monday afternoon, with dangerous heat through Wednesday. Some relief arrives midweek as the storms roll in. Drink your water, Chicago. Now for something more fun \u2014 Kai, Brooke, take it away.",
+    "image": "wx_panel.png"
+  },
+  {
+    "id": "09_sports",
+    "emotion": "happy",
+    "e_cfg": 1.2,
+    "lower_third": "SPORTS  \u00b7  Kai Brooks & Brooke Sands",
+    "lines": [
+      [
+        "sportsM",
+        "Thanks, Marisol! Alright, settle in, Chicago, because for once the Sox are giving us something to smile about. The White Sox are sitting at forty-two and thirty-eight, and get this, Brooke, they're leading the American League Central."
+      ],
+      [
+        "sportsF",
+        "Stop it. The South Siders on top? Munetaka Murakami's bat has been a revelation, and the whole vibe over there has totally flipped. Meanwhile the Cubs are riding the Pete Crow-Armstrong show on the North Side."
+      ],
+      [
+        "sportsM",
+        "P.C.A. is electric. He already hit for the cycle this year, and the Cubs are hanging right in the wild-card mix around forty-four and thirty-eight. A real summer baseball town, both sides."
+      ],
+      [
+        "sportsF",
+        "And shout-out to our northwest-suburban folks out by Barrington Hills, enjoying the long days on the Makray Memorial fairways. Beautiful golf weather."
+      ],
+      [
+        "sportsM",
+        "Nationally, it's wall-to-wall. The World Cup knockout rounds kick off tomorrow right here in North America, Wimbledon serves up Monday, and the Carolina Hurricanes just hoisted their first Stanley Cup in twenty years."
+      ],
+      [
+        "sportsF",
+        "And on the hardwood, the New York Knicks are your N.B.A. champions, Jalen Brunson taking Finals M.V.P. Loaded week of sports. Back to you at the desk."
+      ]
+    ],
+    "image": "wiki_08_worldcup.jpg"
+  },
+  {
+    "id": "10_signoff",
+    "emotion": "neutral",
+    "e_cfg": 1.0,
+    "lower_third": "NNS  \u00b7  Vivian Vale",
+    "speaker": "anchorF",
+    "text": "And that is N N S for tonight. From the wreckage in Venezuela to the heat scorching Europe and right here at home, it has been a remarkable week. Thank you for spending part of your evening with us. I'm Vivian Vale. On behalf of our entire team, stay safe, look out for one another, and good night."
+  }
+]

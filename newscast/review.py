@@ -1,10 +1,12 @@
-"""Vision QA review via the resident Qwen 9B vision model (qwen9b-vis, llama.cpp :8021, OpenAI-compatible).
+"""Vision QA review via the qwen9b vision model on amd0 (https://amd0.python-bull.ts.net/v1, OpenAI-compatible).
 Sends a SPECIFIC per-artifact checklist (not a vague "critique") and Qwen's recommended sampling for
 instruct VLMs (temp 0.7 / top_p 0.8 / top_k 20 / presence_penalty 1.5 / repeat 1.0 — never greedy, which
 degenerates into repetition loops). Prints a structured PASS/FAIL verdict + score + top fix.
   python3 review.py <image.png> [--type anchor|face|backdrop|screen|title|vo|generic] ["extra context"]
 """
-import sys, base64, json, urllib.request
+import sys, os, base64, json, urllib.request
+QWEN_URL   = os.environ.get("QWEN_URL", "https://amd0.python-bull.ts.net/v1/chat/completions")  # qwen9b, all vision-QA+chat
+QWEN_MODEL = os.environ.get("QWEN_MODEL", "Qwen3.5-9B-UD-Q4_K_XL.gguf")
 
 CHECKS = {
  "face": ("This image is an AI-generated headshot used ONLY as a face-swap SOURCE for a TV reporter.",
@@ -56,11 +58,12 @@ prompt = (f"{desc} {extra}\n\nInspect EACH numbered item and answer PASS or FAIL
           "Judge only what you can actually see in the image; do not invent problems.")
 b64 = base64.b64encode(open(img_p, "rb").read()).decode()
 body = json.dumps({
-    "model": "qwen", "temperature": 0.7, "top_p": 0.8, "top_k": 20,
+    "model": QWEN_MODEL, "chat_template_kwargs": {"enable_thinking": False},
+    "temperature": 0.7, "top_p": 0.8, "top_k": 20,
     "presence_penalty": 1.5, "repeat_penalty": 1.0, "max_tokens": 500,
     "messages": [{"role": "user", "content": [
         {"type": "text", "text": prompt},
         {"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64}}]}]}).encode()
-req = urllib.request.Request("http://localhost:8021/v1/chat/completions", data=body,
+req = urllib.request.Request(QWEN_URL, data=body,
                              headers={"Content-Type": "application/json"})
 print(json.load(urllib.request.urlopen(req, timeout=180))["choices"][0]["message"]["content"])

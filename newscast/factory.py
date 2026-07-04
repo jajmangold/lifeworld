@@ -15,7 +15,7 @@ Manifest (JSON):
 import sys, json, os, time, subprocess, threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-BOT = "/srv/nvme-data/containers/projects/bot"
+BOT = "/srv/nvme-data/containers/live/studio"
 FLOCK_DIR = "/tmp/clipfactory"
 man = json.load(open(sys.argv[1]))
 defaults = man.get("defaults", {})

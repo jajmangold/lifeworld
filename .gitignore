@@ -30,3 +30,30 @@ deploy/neo4j-logs/
 .DS_Store
 assets/blenderkit/
 *.cookies
+
+# clean-stack: large data dirs / model assets / browser captures (not source)
+assets/
+humgen/
+sampl/
+docupipe/docgfx/
+docupipe/presenton_data/
+*.har
+
+# clean-stack: vendored upstream repos (own .git — not our source)
+splat/FastAvatar/
+splat/ml-sharp/
+splat/SMPLitex/
+splat/KEEP/
+splat/IDOL/
+
+# clean-stack: model weights / torch caches (huge, not source)
+.torchcache/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.onnx
+
+# clean-stack: audio/motion artifacts (scratch)
+*.wav
+*.bvh

@@ -1,3 +1,8 @@
+<!-- ⚠️ ASPIRATIONAL / TARGET-ARCHITECTURE DOC. Describes a *planned* unified LangGraph system and a target
+     layout that does NOT fully exist yet. For the current, working state (the SDNQ LTX farm, the news +
+     docupipe paths as they actually are), read studio/AGENTS.md and the per-area AGENTS.md. docupipe/ is
+     the real LangGraph pipeline today; the news path is script/server-based, not a unified graph. -->
+
 # Studio — unified LangGraph production system (news + docuseries + future shows)
 
 Target design to unify the two current systems into one langgraph "Studio," with a shared data model
@@ -60,7 +65,7 @@ START → intake(brief→profile) → research → deep_research(fanout) → bib
 **New show type = new ShowProfile (+ maybe a renderer). New scene = new Set entry. No graph rewrite.**
 
 ## Service layer (`studio/services/`) — wrap the locked, working code (don't rewrite)
-`llm` (deepseek/qwen) · `tts` (qwen3dia voices) · `avatar` (calls make_anchor.sh) · `imagegen` (zimage/klein)
+`llm` (deepseek/qwen) · `tts` (amd1 qwen3-tts voices) · `avatar` (calls make_anchor.sh) · `imagegen` (zimage/klein)
 · `archival` · `upscale` (flashvsr) · `graphics` (broadcast_gfx brand package) · `vision_review` (qwen9b-vis).
 Renderers call services; services are idempotent `spec → path`. The locked render scripts are wrapped,
 not rewritten.

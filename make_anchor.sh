@@ -18,7 +18,7 @@ SAMPL=/mnt/datadisk/containers/sampl
 RTX="ssh -o BatchMode=yes josh@rtx0"
 cd "$BOT"
 
-MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall; BG=""; PANO_ENV=""; GLBFILE=""; KEEPEYES=true; CHARFILE=""; ULTRA=0
+MOOD=serious; BROW=1.0; NOD=1.0; BROWBASE=""; SEED=7; FACE=anchorM.png; FAST=0; PREMIUM=0; BAKED=0; BAKEDTEX=anchorM_head_baked.png; HEADTEX=anchorM_klein_head.png; SCREEN=""; OTS=""; AUDIO=""; OUT=""; RESTORE=0.6; FORMAT=anchor_wall; BG=""; PANO_ENV=""; GLBFILE=""; KEEPEYES=true; CHARFILE=""; ULTRA=0; SELFFACE=0; LTX=0
 while [ $# -gt 0 ]; do case "$1" in
   --audio) AUDIO=$2; shift 2;; --out) OUT=$2; shift 2;; --mood) MOOD=$2; shift 2;;
   --brow) BROW=$2; shift 2;; --nod) NOD=$2; shift 2;; --browbase) BROWBASE=$2; shift 2;;
@@ -36,6 +36,9 @@ while [ $# -gt 0 ]; do case "$1" in
   --glb) GLBFILE=$2; shift 2;;       # swap the character mesh (e.g. a viverse reporter VRM/GLB) instead of the anchor
   --character) CHARFILE=$2; shift 2;; # BlenderKit Rigify .blend -> render via render_character.py (viverse-free); swap still runs
   --keepeyes) KEEPEYES=$2; shift 2;; # keep the RENDER's eyes during face-swap (true, default). false => swap brings the source's eyes (fixes viverse dark-eye meshes)
+  --selfface) SELFFACE=1; shift;;   # character mode: swap with a self-portrait rendered under the shot's own lighting (no external face, no seam)
+  --swappasses) SWAPPASSES=$2; shift 2;;   # N inswapper passes (2 = double-swap: real face onto CG 3D face, then again -> photoreal)
+  --ltx) LTX=1; shift;;   # final REALISM pass: LTX-2.3 v2v photorealizes the render (skin/hair/lighting) keeping identity/structure; replaces FlashVSR/GFPGAN finish
   --ots) OTS=$2; shift 2;; *) echo "unknown arg: $1"; exit 1;; esac; done
 [ -z "$AUDIO" ] && { echo "need --audio"; exit 1; }
 [ -z "$OUT" ] && { echo "need --out"; exit 1; }
@@ -67,7 +70,7 @@ $RTX "test -f $SAMPL/newsroom_pano.png" || scp -q output/newsroom_pano.png josh@
 scp -q output/${NAME}.perf.json render_anchor_anim.py josh@rtx0:$SAMPL/
 CB=""
 if [ -n "$CHARFILE" ]; then          # BlenderKit character: stage the .blend + the generic renderer
-  CB="char_${NAME}.blend"; scp -q "$CHARFILE" josh@rtx0:$SAMPL/"$CB"; scp -q render/render_character.py josh@rtx0:$SAMPL/
+  CB="char_${NAME}.blend"; scp -q "$CHARFILE" josh@rtx0:$SAMPL/"$CB"; scp -q render/render_character.py render/fix_hair.py render/graft_hair.py render/slim_face.py josh@rtx0:$SAMPL/
   HEADTEX=""                         # not applicable to a BlenderKit character
   log "character mode: $(basename "$CHARFILE") -> render_character.py"
 fi
@@ -110,7 +113,7 @@ case "$FORMAT" in
 esac
 # forward framing/env overrides set in the caller's environment (per-character tuning, e.g. a viverse
 # avatar with different proportions needs its own headroom/lens): NEWS_AIM/DIST/LENS/FSTOP/WALLROT/ENVSTR.
-for _v in NEWS_AIM NEWS_DIST NEWS_LENS NEWS_FSTOP NEWS_WALLROT NEWS_ENVSTR NEWS_SHIFTX; do
+for _v in NEWS_AIM NEWS_DIST NEWS_LENS NEWS_FSTOP NEWS_WALLROT NEWS_ENVSTR NEWS_SHIFTX NEWS_HAIR_GROOM NEWS_HAIR_MEL NEWS_HAIR_YAW NEWS_FACE_SLIM NEWS_HAIRFIX NEWS_HAIRFIX_MATCH NEWS_HAIR_ROUGH; do
   eval "_val=\${$_v}"; [ -n "$_val" ] && BENV="${BENV}$_v=$_val "
 done
 LK render 201   # serialize rtx0 GPU0 across segments (released right after Blender exits)
@@ -129,10 +132,22 @@ if [ -n "$BG" ]; then
   log "bg plate: $BGB (field backdrop)"
 fi
 # premultiplied-over composite (clean silhouette edges) then encode (CPU — off the GPU lock)
-$RTX "docker exec sampl bash -lc 'cd /work/output/$ADIR && rm -f c[0-9]*.png && python3 /work/composite_premult.py /work/output/$ADIR'" 2>&1 | grep -aE 'COMPOSITE_OK|Error' | tail -1
+$RTX "docker exec sampl bash -lc 'cd /work/output/$ADIR && rm -f c[0-9]*.png && FEATHER=${NEWS_FEATHER:-1.8} ERODE=${NEWS_ERODE:-1} python3 /work/composite_premult.py /work/output/$ADIR'" 2>&1 | grep -aE 'COMPOSITE_OK|Error' | tail -1
 $RTX "docker exec sampl bash -lc 'cd /work/output/$ADIR && ffmpeg -y -framerate 25 -i c%04d.png -c:v libx264 -pix_fmt yuv420p -crf 18 /work/output/${NAME}_silent.mp4 2>&1 | tail -1'" >/dev/null
 scp -q josh@rtx0:$SAMPL/output/${NAME}_silent.mp4 output/${NAME}_silent.mp4
 log "render done -> output/${NAME}_silent.mp4"
+
+# SELF-FACE: render_character.py rendered a frontal self-portrait under THIS shot's exact lighting. Use it as
+# the face-swap source so the character is swapped with ITSELF (identity + tone match the scene -> no seam).
+if [ "$SELFFACE" = 1 ] && [ -n "$CHARFILE" ]; then
+  $RTX "docker exec sampl chmod 777 /work/output/$ADIR/self_face.png 2>/dev/null" || true
+  if scp -q josh@rtx0:$SAMPL/output/$ADIR/self_face.png output/${NAME}_self.png 2>/dev/null; then
+    FACE=${NAME}_self.png
+    log "self-face swap source -> output/${NAME}_self.png (matched to the shot's lighting)"
+  else
+    log "WARN: self_face.png missing; using --face $FACE"
+  fi
+fi
 
 # 3) MOUTH/IDENTITY ---------------------------------------------------------------
 if [ "$FAST" = 1 ]; then
@@ -152,7 +167,10 @@ else
     LK swap 202   # serialize the V100 swap-server across segments
     # swap WITHOUT GFPGAN (soft, fast) + save detected faces — GFPGAN is moved to a final restore pass
     # after MuseTalk so it also sharpens the soft 256px muse mouth (same total compute, better quality).
-    printf '{"src":"/o/%s","video":"/o/%s_silent.mp4","out":"/o/%s_swap.mp4","keepeyes":%s,"enhance":false,"save_faces":"/o/%s.faces.json"}\n' "$FACE" "$NAME" "$NAME" "$KEEPEYES" "$NAME" > output/swap_jobs/${NAME}.json
+    FEATHER=$([ "$PREMIUM" = 1 ] && echo true || echo false)   # premium skips GFPGAN -> feather the swap edge (kill the halo)
+    # DOUBLE-SWAP (SWAPPASSES=2): one inswapper pass onto a CG/3D-render face isn't real enough; a 2nd pass on
+    # the already-swapped (now photographic) frame lands the real identity. Default 1 (viverse anchor path).
+    printf '{"src":"/o/%s","video":"/o/%s_silent.mp4","out":"/o/%s_swap.mp4","keepeyes":%s,"enhance":false,"feather":%s,"passes":%s,"save_faces":"/o/%s.faces.json"}\n' "$FACE" "$NAME" "$NAME" "$KEEPEYES" "$FEATHER" "${SWAPPASSES:-1}" "$NAME" > output/swap_jobs/${NAME}.json
     while [ ! -f output/swap_jobs/${NAME}.done ] && [ ! -f output/swap_jobs/${NAME}.err ]; do sleep 3; done
     UNLK swap 202
     [ -f output/swap_jobs/${NAME}.err ] && { echo "SWAP ERR: $(cat output/swap_jobs/${NAME}.err)"; exit 1; }
@@ -191,9 +209,14 @@ else
       rm -f output/${NAME}_talk.mp4 output/${NAME}_settle.mp4; mv output/${NAME}_setav.mp4 output/${NAME}_talk.mp4
     fi
   fi
-  # FINAL FACE FINISH: --premium => FlashVSR-face 2x diffusion upscale on rtx0 (1440p, replaces GFPGAN).
-  # else => GFPGAN-keepeyes restore reusing the swap's saved faces (720p, fast).
-  if [ "$PREMIUM" = 1 ]; then
+  # FINAL FACE FINISH: --ltx => LTX-2.3 v2v REALISM pass (photorealizes the whole render, keeps identity/
+  # structure; the route past the 'rendered' look). --premium => FlashVSR-face 2x. else => GFPGAN restore.
+  if [ "$LTX" = 1 ]; then
+    log "LTX-2.3 realism pass (photorealize the render, keep identity/structure)..."
+    bash "$BOT/render/ltx_realism.sh" output/${NAME}_talk.mp4 output/${NAME}_ltx.mp4 "${NEWS_LTX_DENOISE:-0.65}" "${NEWS_LTX_GPU:-0}" 2>&1 | grep -aE 'DONE ->|FAILED|retime' | tail -2
+    [ -f output/${NAME}_ltx.mp4 ] && mv output/${NAME}_ltx.mp4 output/${NAME}_talk.mp4 || { echo "LTX pass failed"; exit 1; }
+    log "ltx done -> $(ffprobe -v error -show_entries stream=width,height -of csv=p=0:s=x output/${NAME}_talk.mp4 2>/dev/null | head -1)"
+  elif [ "$PREMIUM" = 1 ]; then
     log "FlashVSR-face 2x premium upscale on rtx0 (~4min)..."
     WAN=/mnt/datadisk/containers/wan2gp
     scp -q output/${NAME}_talk.mp4 josh@rtx0:$WAN/myinput/${NAME}.mp4
@@ -212,6 +235,23 @@ else
     rm -f output/${NAME}_talk.mp4   # muse wrote it as root; scp can't overwrite, only the josh-owned dir lets us unlink
     scp -q josh@rtx0:$WAN/outputs/flashvsr/wan2gp_face_fast_${NAME}_2x.mp4 output/${NAME}_talk.mp4
     OTSW=860   # OTS panels at 2x for the 1440p canvas
+    # EYE-PRESERVE: FlashVSR-face is a diffusion super-res with NO eye-carve (unlike GFPGAN keepeyes), so it
+    # re-opens/smooths the rendered blinks. Composite the real (blinking) eyes from the pre-FlashVSR swap+muse
+    # video back over FlashVSR's output. Needs the swap's saved faces (kps); skip if absent (e.g. baked mode).
+    if [ -f output/${NAME}.faces.json ]; then
+      log "eye-preserve (restore blinks FlashVSR smoothed)..."
+      cp newscast/eye_restore.py output/eye_restore.py
+      scp -q josh@rtx0:$WAN/myinput/${NAME}.mp4 output/${NAME}_pre.mp4
+      docker ps --format '{{.Names}}' | grep -q '^swap-server$' || { bash "$BOT/swap/run_swap.sh"; \
+        for i in $(seq 1 20); do docker logs --tail 5 swap-server 2>&1 | tr '\r' '\n' | grep -q SWAP_SERVER_READY && break; sleep 3; done; }
+      docker exec swap-server python3 /o/eye_restore.py /o/${NAME}_talk.mp4 /o/${NAME}_pre.mp4 /o/${NAME}.faces.json /o/${NAME}_eyefix.mp4 2>&1 | grep -aE 'EYE_RESTORE_OK|Error' | tail -1
+      if [ -f output/${NAME}_eyefix.mp4 ]; then
+        ffmpeg -y -i output/${NAME}_eyefix.mp4 -i output/${NAME}_pre.mp4 -map 0:v -map 1:a? \
+          -c:v libx264 -pix_fmt yuv420p -crf 17 -c:a aac -shortest output/${NAME}_eyeav.mp4 2>/dev/null
+        mv output/${NAME}_eyeav.mp4 output/${NAME}_talk.mp4
+      fi
+      rm -f output/${NAME}_eyefix.mp4 output/${NAME}_pre.mp4
+    fi
     log "flashvsr done -> $(ffprobe -v error -show_entries stream=width,height -of csv=p=0:s=x output/${NAME}_talk.mp4 2>/dev/null | head -1)"
   else
     # GFPGAN restore: reuse the swap's saved faces if present, else re-detect (baked mode has no swap)
