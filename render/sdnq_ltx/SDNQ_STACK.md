@@ -186,9 +186,18 @@ continuation. Not yet integrated (see §10).
   **Across 6 gen cards in parallel → ~1.3–1.9 min amortized per 10 s clip.** On the quantized-matmul base
   path these drop substantially — re-measure once a2v runs with `use_quantized_matmul=True`.
 
-**Crisp lip-sync (mouth ≥ ~2.5 latent px, i.e. 512×768) does NOT fit one 16 GB card.** Real fix =
-multi-GPU tensor/sequence parallelism across the farm (the rig is built for fan-out). FlashVSR upscaling
-sharpens but does NOT add lip MOTION (motion is generated at the base res).
+**CORRECTION (T0.1b, measured): crisp lips DO fit one card via the two-stage SPATIAL UPSCALER — no multi-GPU
+needed.** `a2v_two_stage.py`: a2v denoise at 256×384 → LTX2 spatial x2 latent upsampler (`ltx-2.3-spatial-
+upscaler-x2-1.1`, from the full Lightricks LTX-2.3 cache) → 3-step refine at **512×768** (offload, ~12.8 GB).
+Result: **sharp (qwen 9/10)**, mouth articulates. Two levers for a production anchor:
+- **Sharpness → the two-stage spatial upscaler** (512×768; the earlier "384×512 hard ceiling / need multi-GPU"
+  was wrong — that was single-stage only).
+- **Lip MOTION → `modality_scale ≈ 6`** (vs the default 3) + audio-matched frames: clearly more mouth
+  articulation (qwen 10/10 "actively speaking" vs subtle at mod 3). modality is the motion dial.
+Constraints: **512×768 stage-2 fits ~57 pixel frames (2.3 s); 73f OOMs** → for longer, window or cut from
+short shots. The two-stage run is compile-heavy on offload (~7 min first-run) — optimize via resident +
+warm kernels for production. Pipeline of record candidate = **two-stage + modality≈6 + matched audio** (T0.1c
+confirms on ≥3 clips). FlashVSR still sharpens but does NOT add lip MOTION (motion is generated, not upscaled).
 
 ---
 

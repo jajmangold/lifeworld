@@ -27,7 +27,7 @@ finishing path; **newscast/** does script+TTS+graphics; **NNS** brand. See `rend
   - Done-when: `pm/QUALITY_BAR.md` defines pass/fail thresholds — lip-sync (audio-driven, verified),
     identity consistency, motion/no-glitch, resolution/sharpness, throughput/segment — with the qwen-QA
     method to score each. (Defines the bar; does not assume we meet it.)
-- **[T0.1b] SPIKE: what does it take to hit the lip-sync/motion bar?** · P0 · wip · `[exp]` time-box ~2–3 days
+- **[T0.1b] SPIKE: what does it take to hit the lip-sync/motion bar?** · P0 · done · `[exp]` time-box ~2–3 days
   - Ships: a decision on the anchor pipeline of record + evidence it can hit the bar.
   - Depends-on: T0.1a
   - Done-when: the real options are evaluated against the bar × complexity × runs-on-farm, and ONE is chosen
@@ -53,7 +53,12 @@ finishing path; **newscast/** does script+TTS+graphics; **NNS** brand. See `rend
     shape" across frames) — the refine sharpened the subtle a2v motion, didn't increase it. So the crisp-
     lips problem splits: **sharpness = solved (two-stage); motion amplitude = the real open gap** (likely
     levers: modality_scale, audio↔video length match, confirm audio-driven). Investigating next.
-- **[T0.1c] Implement the chosen approach to the bar** · P0 · todo
+  - DECISION (evidence): the production anchor pipeline = **a2v two-stage (256→512×768 spatial upscaler)
+    + modality_scale≈6 + audio-matched frame count.** Two levers, both proven this session: (1) sharpness →
+    spatial upscaler (qwen 9/10 @512×768, fits one card); (2) lip-MOTION → modality_scale 6 (vs 3) +
+    NPX=audio-frames gives clear articulation (qwen 10/10 "actively speaking"; mouth-strip shows open/teeth/
+    jaw variation vs the old subtle motion). Next: T0.1c confirms the COMBINED pipeline on ≥3 clips.
+- **[T0.1c] Implement the chosen approach to the bar (two-stage + modality≈6 + matched audio)** · P0 · todo
   - Ships: the production-quality anchor itself.
   - Depends-on: T0.1b
   - Done-when: the anchor passes `pm/QUALITY_BAR.md` on ≥3 varied clips (qwen-scored, lip-sync verified);

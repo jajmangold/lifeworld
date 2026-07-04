@@ -7,6 +7,8 @@ Date-stamp a release when a roadmap milestone ships.
 ## [Unreleased]
 
 ### Added
+- **T0.1b spike DECIDED** — production anchor = a2v two-stage spatial upscaler (512×768 sharp, qwen 9/10)
+  + modality_scale≈6 + audio-matched frames (lip motion, qwen 10/10). Sharpness AND motion levers found.
 - **Project-management system** in `pm/` — VISION (north star + quality bar), STRATEGY (money + YouTube/
   TikTok playbook + compliance survival rules, sourced), PROCESS (the operating system: ship>perfect>shiny,
   mandatory sequential-thinking + trailmark, DoD, WIP limits, experiment/parking-lot discipline), ROADMAP
