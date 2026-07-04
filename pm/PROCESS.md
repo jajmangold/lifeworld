@@ -34,14 +34,18 @@ If you are ever unsure what to do, do the thing that ships the next segment.
    change it — never hand-grep a module you don't already know. (Skip only for pure-docs or a one-line
    edit to a file you just wrote.)
 4. **Do** the smallest change that satisfies the item's *Done-when*. Don't gold-plate.
-5. **Validate**: run it / test it. Prove it works with evidence (a run, a metric, a qwen QA score), not
-   a claim. "Done" means demonstrated, not written.
+5. **Validate**: run it / test it. Prove it works with evidence, not a claim. **Any image/video output MUST
+   be QA'd with qwen9b (amd0) AS YOU GO** — grounded VQA (temp 0, structured describe-then-judge, no
+   priming) via `/tmp/claude-1000/proof/qa.py` (`compare`/`rate`); requests need
+   `chat_template_kwargs:{enable_thinking:false}`. Visual quality is a **qwen score, never a vibe** — QA
+   every important frame/clip, keep the evidence. "Done" means demonstrated, not written.
 6. **Log**: update the item's status in BACKLOG, add a [CHANGELOG](../CHANGELOG.md) entry, and update the
    relevant `AGENTS.md`/doc if behavior or structure changed (§3).
 
 ## 2. Definition of Done (DoD) — an item is done ONLY when ALL are true
 
 - [ ] Acceptance criteria (the item's **Done-when**) demonstrably met, with evidence.
+- [ ] **Any visual output was QA'd with qwen9b** (score/compare) and the evidence is kept — no shipping images on vibes.
 - [ ] Sequential-thinking was used to plan it; trailmark was used if code structure was touched.
 - [ ] Docs updated: the nearest `AGENTS.md` reflects reality; capabilities not stale paths.
 - [ ] A CHANGELOG entry exists under **Unreleased**.

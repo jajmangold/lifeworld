@@ -28,6 +28,8 @@ non-trivial work:
      sense.
    - **Done = demonstrated + documented + logged:** meet the item's Done-when with evidence, update the
      nearest `AGENTS.md`, add a [CHANGELOG](CHANGELOG.md) entry, set the BACKLOG status. See PROCESS §2 (DoD).
+   - **QA every image/video with qwen9b (amd0) as you go** — grounded VQA via `qa.py`; visual quality is a
+     qwen score, never a vibe (PROCESS §1.5).
    - **Experiments are time-boxed** with a kill criterion; graduate-or-archive. Retire superseded code to
      `bot-archive/` — no sprawl.
 

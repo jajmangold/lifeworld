@@ -31,12 +31,22 @@ finishing path; **newscast/** does script+TTS+graphics; **NNS** brand. See `rend
   - Ships: a decision on the anchor pipeline of record + evidence it can hit the bar.
   - Depends-on: T0.1a
   - Done-when: the real options are evaluated against the bar × complexity × runs-on-farm, and ONE is chosen
-    with evidence. Options to weigh (don't pre-decide): **(a)** multi-GPU tensor/sequence-parallel a2v at
-    512×768 (crisp mouth; uses the farm's fan-out — was mis-parked as "shiny", it's the P0 blocker fix);
-    **(b)** two-stage — generate motion at the res that fits, then a dedicated high-res re-lip/relight pass;
-    **(c)** external high-res lip-sync on a high-res anchor still; **(d)** a tighter MCU framing where current
-    res suffices. Kill criterion: if none clears the bar in the time-box, escalate (bar may need to move, or
-    a bigger architecture bet). First: prove a2v is genuinely audio-driven (silent-vs-speech differential).
+    with evidence. Options to weigh (don't pre-decide):
+    - **(a) Fit higher res (512×768) on ONE card via TILING/chunked attention.** The "384×512 hard ceiling"
+      was NOT fully explored — only diffusers `enable_attention_slicing` was tried, and the custom
+      `LTX2PerturbedAttnProcessor` ignores it. Untested: transformer-level attention tiling/chunking (query
+      blocks), memory-efficient/chunked SDPA, VAE-tiling already helps decode. **Try this first** — if it
+      works, crisp lips need no multi-GPU (boring-tech win).
+    - **(b) Multi-GPU** tensor/sequence-parallel a2v at 512×768 (uses the farm fan-out; bigger spend — only
+      if (a) fails).
+    - **(c) Two-stage**: motion at the fittable res → dedicated high-res re-lip/relight pass.
+    - **(d) External high-res lip-sync** on a high-res anchor still.
+    - **(e) Tighter MCU framing** where current res already suffices (cheapest).
+    Kill criterion: if none clears the bar in the time-box, escalate. First steps: prove a2v is genuinely
+    audio-driven (silent-vs-speech differential); QA all comparisons with qwen9b.
+  - NOTE (measured this session): both a2v AND IC-LoRA work on the **production `use_quantized_matmul=True`**
+    path with **no quality loss and ~1.7–2× speedup** (a2v 256×384 = 58.6s vs eager 97s; ic_union = 44s).
+    The 384×512 OOM ceiling is unchanged by quantized-matmul (it's attention memory) — hence option (a).
 - **[T0.1c] Implement the chosen approach to the bar** · P0 · todo
   - Ships: the production-quality anchor itself.
   - Depends-on: T0.1b
