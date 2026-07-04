@@ -9,6 +9,33 @@ working in that area.
 
 ---
 
+## How we work — READ AND FOLLOW ([pm/](pm/) is the project-management system)
+
+This is a **revenue-generating** operation with a project-management system that is **binding**. Before any
+non-trivial work:
+
+1. **Orient:** [pm/VISION.md](pm/VISION.md) (north star + the production quality bar) and
+   [pm/STRATEGY.md](pm/STRATEGY.md) (how we make money + the compliance rules that keep the network alive).
+2. **Pick work from [pm/BACKLOG.md](pm/BACKLOG.md)** — the highest-priority *unblocked* item. Respect the
+   **WIP limit (≤2 in progress)**. If your task isn't an item, make it one first. Sequencing:
+   [pm/ROADMAP.md](pm/ROADMAP.md).
+3. **Follow [pm/PROCESS.md](pm/PROCESS.md) for every item** — it is the operating system:
+   - **SHIP > perfect > shiny.** Lock production quality, then scale. New tech must clear the shiny-object
+     gate (PROCESS §6) or it goes to the parking lot. **The system exists to keep us shipping — don't chase
+     shiny.**
+   - **Sequential-thinking is MANDATORY** to plan any non-trivial change.
+   - **Trailmark is MANDATORY** before touching unfamiliar code (structure/complexity/deps), where it makes
+     sense.
+   - **Done = demonstrated + documented + logged:** meet the item's Done-when with evidence, update the
+     nearest `AGENTS.md`, add a [CHANGELOG](CHANGELOG.md) entry, set the BACKLOG status. See PROCESS §2 (DoD).
+   - **Experiments are time-boxed** with a kill criterion; graduate-or-archive. Retire superseded code to
+     `bot-archive/` — no sprawl.
+
+The golden rules below (sm_70, never `kill -9` CUDA, etc.) are the operational floor; `pm/` is *how we
+decide what to build and prove it's done*.
+
+---
+
 ## What studio is (current state, not the plan)
 
 Two production lines share one rig and one finishing toolchain:
