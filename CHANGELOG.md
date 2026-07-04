@@ -20,6 +20,11 @@ Date-stamp a release when a roadmap milestone ships.
 - Canonical shared-services section in `studio/AGENTS.md` (amd0 qwen9b, amd1 qwen3-tts), env-overridable.
 
 ### Changed
+- **Honest reset of P0**: we do NOT have a production-quality anchor yet. Reframed `pm/` E0.1 from "freeze
+  the spec" to "**ACHIEVE** a production-quality talking anchor" (unsolved R&D), marked the VISION quality
+  bar **STATUS: NOT MET**, and **unparked** the multi-GPU crisp-lip-sync work into E0.1b as a candidate fix
+  (per the shiny-object gate, fixing the unlocked base is P0, not a parking-lot item). Everything downstream
+  is explicitly blocked on E0.1.
 - **Endpoints consolidated** onto amd0/amd1 (env-configurable): qwen9b vision+chat →
   `amd0.python-bull.ts.net/v1` (requires `chat_template_kwargs:{enable_thinking:false}`); qwen3-tts →
   `amd1:8064`. Repointed newscast/{synth_voice,synth_anchor,review}, docupipe config + tools/review,

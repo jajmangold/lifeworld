@@ -18,18 +18,30 @@ finishing path; **newscast/** does script+TTS+graphics; **NNS** brand. See `rend
 
 ## PHASE 0 — Lock production quality  (ACTIVE · all P0)
 
-### E0.1 — Anchor quality bar
-- **[T0.1a] Freeze the anchor quality spec** · P0 · todo
-  - Ships: a written, measurable bar everyone builds to (unblocks *all* scaling).
+### E0.1 — ACHIEVE a production-quality talking anchor  ← THE gate; all of Phase 1+ is blocked on it
+> Honest status: **we do not have this yet.** a2v_talk lips move but are subtle + res-capped (384×512 on one
+> card). This epic is genuinely unsolved R&D, not polish. Nothing else ships until it clears the bar.
+- **[T0.1a] Write the measurable quality bar** · P0 · todo
+  - Ships: an objective target so "good enough" isn't a vibe.
   - Depends-on: —
-  - Done-when: `pm/QUALITY_BAR.md` defines the pipeline of record (a2v audio-driven vs swap+muse; the res
-    choice, e.g. 384×512 + FlashVSR) with **measurable thresholds** (qwen QA score, lip-sync pass, no-glitch,
-    throughput/segment); decision recorded; AGENTS.md/CHANGELOG updated.
-- **[T0.1b] Hit + verify lip-sync at the chosen res** · P0 · todo
-  - Ships: an anchor whose lips actually move, audio-synced (the user's core complaint).
+  - Done-when: `pm/QUALITY_BAR.md` defines pass/fail thresholds — lip-sync (audio-driven, verified),
+    identity consistency, motion/no-glitch, resolution/sharpness, throughput/segment — with the qwen-QA
+    method to score each. (Defines the bar; does not assume we meet it.)
+- **[T0.1b] SPIKE: what does it take to hit the lip-sync/motion bar?** · P0 · todo · `[exp]` time-box ~2–3 days
+  - Ships: a decision on the anchor pipeline of record + evidence it can hit the bar.
   - Depends-on: T0.1a
-  - Done-when: silent-vs-speech differential proves motion is audio-driven; lip-sync passes the bar at the
-    frozen res; evidence saved. (Crisp 512×768 lips = PARKING LOT, needs multi-GPU — do NOT open here.)
+  - Done-when: the real options are evaluated against the bar × complexity × runs-on-farm, and ONE is chosen
+    with evidence. Options to weigh (don't pre-decide): **(a)** multi-GPU tensor/sequence-parallel a2v at
+    512×768 (crisp mouth; uses the farm's fan-out — was mis-parked as "shiny", it's the P0 blocker fix);
+    **(b)** two-stage — generate motion at the res that fits, then a dedicated high-res re-lip/relight pass;
+    **(c)** external high-res lip-sync on a high-res anchor still; **(d)** a tighter MCU framing where current
+    res suffices. Kill criterion: if none clears the bar in the time-box, escalate (bar may need to move, or
+    a bigger architecture bet). First: prove a2v is genuinely audio-driven (silent-vs-speech differential).
+- **[T0.1c] Implement the chosen approach to the bar** · P0 · todo
+  - Ships: the production-quality anchor itself.
+  - Depends-on: T0.1b
+  - Done-when: the anchor passes `pm/QUALITY_BAR.md` on ≥3 varied clips (qwen-scored, lip-sync verified);
+    becomes the documented pipeline of record; SDNQ_STACK.md + CHANGELOG updated.
 
 ### E0.2 — Reliable one-command segment
 - **[T0.2a] One command → finished segment, unattended** · P0 · todo
@@ -95,8 +107,8 @@ finishing path; **newscast/** does script+TTS+graphics; **NNS** brand. See `rend
 
 ## PARKING LOT (captured, NOT built — shiny-object gate, PROCESS §6)
 Revisit only at phase boundaries. Being here means "good idea, wrong time."
-- **Crisp lip-sync at 512×768 via multi-GPU tensor/sequence parallelism** — the single-card res ceiling
-  blocks it; only justified if 384×512 fails the quality bar (T0.1a) for real.
+- ~~Crisp lip-sync via multi-GPU~~ — **UNPARKED into E0.1b option (a):** it's not shiny, it's a candidate
+  fix for the P0 anchor-quality blocker. Evaluate it there against the alternatives.
 - **True 3D/2.5D newsroom grounding** beyond the green-screen composite.
 - **Two-stage LTX (half-res→upscaler→refine)** for sharper output — only if the bar demands it.
 - **IC-LoRA depth/pose control in production** — works (`ic_union.py`) but not needed to ship a talking anchor.

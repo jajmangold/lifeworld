@@ -23,6 +23,12 @@ platform playbook: [STRATEGY.md](STRATEGY.md).
 
 ## The production quality bar (what "locked in" means — DoD for the pipeline)
 
+**STATUS: NOT MET.** We do **not** have a production-quality anchor yet. The native audio-driven anchor
+(`a2v_talk.py`) is a promising prototype but the lips move only subtly and are resolution-capped (384×512
+on one 16GB sm_70 card) — below a credible talking-news-anchor bar. **Achieving this bar is the current P0
+work (E0.1), and it is genuinely unsolved R&D, not a formality.** Everything downstream (channels, revenue)
+is blocked on it — you cannot run a news studio without a believable anchor.
+
 We do not scale or add capability until the core pipeline reliably hits this bar (measured, not vibes):
 
 - **Anchor**: photoreal, identity-consistent, **lips actually move / audio-synced**, natural head motion,
