@@ -93,7 +93,8 @@ def _finish(d, a, c, hd_rel, hd_abs, extra):
         print("RETEXTURE_FAILED (no HD blend produced)")
 
 def cmd_retexture(d, a):
-    {"klein": _retex_klein, "esrgan": _retex_esrgan, "recolor": _retex_recolor}[a.method](d, a)
+    # 'klein' kept as a deprecated alias -> now uses qwen-edit (Klein retired for wardrobe).
+    {"qwen": _retex_klein, "klein": _retex_klein, "esrgan": _retex_esrgan, "recolor": _retex_recolor}[a.method](d, a)
 
 def _render_and_klein(a, cb, material, vlocal, only_front=False):
     """Shared: render flat ~albedo views on rtx0, then Klein-edit them (sd.cpp). Returns the view names."""
@@ -105,15 +106,15 @@ def _render_and_klein(a, cb, material, vlocal, only_front=False):
     if not views: sys.exit("no views rendered (material not on a mesh?)")
     if only_front: views = [v for v in views if v == "front"] or views[:1]
     print(f"[wardrobe] rendered views: {views}")
-    shutil.copy(os.path.join(BOT, "viverse_avatar", "klein_edit.py"), os.path.join(vlocal, "_klein_edit.py"))
+    shutil.copy(os.path.join(BOT, "render", "qwen_edit_client.py"), os.path.join(vlocal, "_qwen_edit.py"))
     instr = f"{a.instruction}. Keep the person's pose, body, face and background identical; change only the clothing."
     for v in views:
-        sh(f"docker run --rm --network lm-stack_ai -v {vlocal}:/t -w /t --entrypoint python3 klein-proxy:1.0 "
-           f"/t/_klein_edit.py /t/view_{v}.png \"{instr}\" /t/edited_{v}.png",
+        sh(f"docker run --rm --network lm-stack_ai -v {vlocal}:/t -w /t --entrypoint python3 qwen-edit-proxy:1.0 "
+           f"/t/_qwen_edit.py /t/view_{v}.png \"{instr}\" /t/edited_{v}.png",
            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if not os.path.exists(f"{vlocal}/edited_{v}.png"):
             shutil.copy(f"{vlocal}/view_{v}.png", f"{vlocal}/edited_{v}.png")
-        print(f"  klein {'OK' if os.path.exists(f'{vlocal}/edited_{v}.png') else 'FAIL'} {v}")
+        print(f"  qwen-edit {'OK' if os.path.exists(f'{vlocal}/edited_{v}.png') else 'FAIL'} {v}")
     return views, rg, rg_host
 
 def _retex_recolor(d, a):
@@ -180,15 +181,15 @@ def _retex_klein(d, a):
     print(f"[wardrobe] rendered views: {views}")
 
     # 2) Klein-edit each view (change only the outfit)
-    shutil.copy(os.path.join(BOT, "viverse_avatar", "klein_edit.py"), os.path.join(vlocal, "_klein_edit.py"))
+    shutil.copy(os.path.join(BOT, "render", "qwen_edit_client.py"), os.path.join(vlocal, "_qwen_edit.py"))
     instr = f"{a.instruction}. Keep the person's pose, body, face and background identical; change only the clothing."
     for v in views:
-        sh(f"docker run --rm --network lm-stack_ai -v {vlocal}:/t -w /t --entrypoint python3 klein-proxy:1.0 "
-           f"/t/_klein_edit.py /t/view_{v}.png \"{instr}\" /t/edited_{v}.png",
+        sh(f"docker run --rm --network lm-stack_ai -v {vlocal}:/t -w /t --entrypoint python3 qwen-edit-proxy:1.0 "
+           f"/t/_qwen_edit.py /t/view_{v}.png \"{instr}\" /t/edited_{v}.png",
            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if not os.path.exists(f"{vlocal}/edited_{v}.png"):
             shutil.copy(f"{vlocal}/view_{v}.png", f"{vlocal}/edited_{v}.png")   # fallback so the bake still runs
-        print(f"  klein {'OK' if os.path.exists(f'{vlocal}/edited_{v}.png') else 'FAIL'} {v}")
+        print(f"  qwen-edit {'OK' if os.path.exists(f'{vlocal}/edited_{v}.png') else 'FAIL'} {v}")
         # Camera-projection baking maps world position -> UV; on curved/foreshortened surfaces (sleeves,
         # collar, lapels) that mapping is many-to-one, so a fine pattern (pinstripes) aliases into camo-like
         # noise once baked. A mild blur pre-pass suppresses the offending high frequency before the bake while
@@ -225,7 +226,8 @@ if __name__ == "__main__":
     p = sub.add_parser("show"); p.add_argument("char")
     p = sub.add_parser("textures"); p.add_argument("char")
     p = sub.add_parser("retexture"); p.add_argument("char")
-    p.add_argument("--method", choices=["recolor", "klein", "esrgan"], default="recolor")
+    p.add_argument("--method", choices=["recolor", "qwen", "klein", "esrgan"], default="recolor",
+                   help="qwen = Qwen-Image-Edit reproject (klein = deprecated alias -> qwen)")
     p.add_argument("--maps", default="")           # comma substrings (e.g. suit,skin); empty = all albedo
     p.add_argument("--instruction", default="")    # klein: what to change the material into
     a = ap.parse_args()

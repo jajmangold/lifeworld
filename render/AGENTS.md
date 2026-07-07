@@ -23,7 +23,8 @@ bash make_character.sh --char asset.blend --audio out/x.wav --out out/final.mp4 
 ```
 Wardrobe / texture / hair ops (called by the above, also standalone):
 ```
-python3 render/wardrobe.py {list|show|textures|retexture} <char> [--method recolor|klein|esrgan] ...
+python3 render/wardrobe.py {list|show|textures|retexture} <char> [--method recolor|qwen|esrgan] ...
+#   --method qwen = Qwen-Image-Edit reproject (render->edit->bake). 'klein' is a deprecated alias -> qwen.
 python3 render/gen_hair.py "<prompt>"          # HAAR strand groom via resident hairgen service
 ```
 FlashVSR face upscale (resident async queue :8800; `ULTRA=1`→4x): `bash render/flashvsr/flashvsr_face.sh <stem>`
@@ -31,7 +32,7 @@ LTX realism pass (wan2gp docker on rtx0): `bash render/ltx_realism.sh <in.mp4> <
 
 ## Key files
 - `render_character.py` — source of truth for the viverse-free Rigify/BlenderKit render (framing, HDRI light, ARKit-driven blinks/brows/idle, premult frames). MuseTalk owns the mouth; face-swap runs downstream.
-- `wardrobe.py` — CLI manager over `catalog/wardrobe.json` + character/garment textures (BlenderKit dl, ESRGAN upscale, Klein edit, Blender repack). Ties the loose texture ops together.
+- `wardrobe.py` — CLI manager over `catalog/wardrobe.json` + character/garment textures (BlenderKit dl, ESRGAN upscale, instruction-edit, Blender repack). The `qwen`/`recolor` garment edits now go through the **qwen-edit** server (`render/qwen_edit_client.py` → `qwen-edit:9000`), replacing FLUX.2-Klein — higher-fidelity identity/pose preservation, ~25 s/view. Ties the loose texture ops together.
 - `gen_hair.py` + `graft_hair.py` + `fix_hair.py` — HAAR groom generation, grafting onto the head bone, and the EEVEE hair/cloth de-plasticiser (fixes "wet rubber" female-character hair).
 - `flashvsr/flashvsr_face.sh` (+ `detect_crop.py`, `composite.py`) — head-crop diffusion upscale; the `--premium/--ultra` finisher.
 - `ltx_realism.sh` / `ltx_server.py` — LTX-2.3 low-denoise v2v photoreal pass (retimes + re-muxes to preserve A/V sync).
@@ -45,5 +46,9 @@ LTX realism pass (wan2gp docker on rtx0): `bash render/ltx_realism.sh <in.mp4> <
 - This dir is a grab-bag of experiments — confirm a file is on the `make_anchor.sh` call graph before assuming it's live.
 
 ## Related
+- **Image-edit backend = `qwen-edit` sd.cpp servers** (`../../lm-stack/qwen-edit-sdcpp/README.md`): resident
+  Qwen-Image-Edit-2511 (`:9010`, background/attribute edits, used by `wardrobe.py`) + 2509 Next-Scene (`:9011`),
+  4-step lightning baked, ~25 s/512². Plain-prompt front door at `:9013` (qwen9b routes+rewrites). Replaces
+  the FLUX.2-Klein path for studio garment edits. Klein (`lm-stack/klein-sdcpp`) is being retired.
 - `render/sdnq_ltx/SDNQ_STACK.md` — the LTX-2.3 SDNQ resident farm (documented separately; do not duplicate here).
 - Up: `make_anchor.sh` / `make_character.sh` / `proc_perf.py` (perf → render). Down: swap + MuseTalk stages, then `output/`.
