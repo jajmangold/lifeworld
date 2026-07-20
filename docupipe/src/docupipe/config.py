@@ -11,6 +11,9 @@ for _d in (CACHE_DIR, ASSETS_DIR, RENDERS_DIR, EPISODES_DIR):
     os.makedirs(_d, exist_ok=True)
 
 # ── LLM (OpenAI-compatible). Default writer path is OpenCode Go DeepSeek V4 Flash.
+OPENCODE_GO_URL = "https://opencode.ai/zen/go/v1"
+
+
 def _opencode_go_key():
     k = os.environ.get("OPENCODE_GO_API_KEY", "")
     token_file = os.environ.get("DOCUPIPE_OPENCODE_GO_TOKEN_FILE", "")
@@ -28,17 +31,28 @@ def _opencode_go_key():
     return k
 
 
-def _tier_key(name):
-    return os.environ.get(name, "") or _opencode_go_key()
+def _tier_key(name, base_url):
+    explicit = os.environ.get(name, "")
+    if explicit:
+        return explicit
+    if base_url.rstrip("/") != OPENCODE_GO_URL:
+        return ""
+    return _opencode_go_key()
+
+
+def _tier(name):
+    prefix = f"DOCUPIPE_{name.upper()}"
+    base_url = os.environ.get(f"{prefix}_URL", OPENCODE_GO_URL)
+    return {
+        "base_url": base_url,
+        "model": os.environ.get(f"{prefix}_MODEL", "deepseek-v4-flash"),
+        "key": _tier_key(f"{prefix}_KEY", base_url),
+    }
 
 # "bulk" tier (research/outline) and "writer" tier (script).
 LLM = {
-    "bulk":   {"base_url": os.environ.get("DOCUPIPE_BULK_URL",   "https://opencode.ai/zen/go/v1"),
-               "model":    os.environ.get("DOCUPIPE_BULK_MODEL", "deepseek-v4-flash"),
-               "key":      _tier_key("DOCUPIPE_BULK_KEY")},
-    "writer": {"base_url": os.environ.get("DOCUPIPE_WRITER_URL",   "https://opencode.ai/zen/go/v1"),
-               "model":    os.environ.get("DOCUPIPE_WRITER_MODEL", "deepseek-v4-flash"),
-               "key":      _tier_key("DOCUPIPE_WRITER_KEY")},
+    "bulk": _tier("bulk"),
+    "writer": _tier("writer"),
 }
 # local example (once lm-stack up): DOCUPIPE_BULK_URL=http://localhost:8047/v1 BULK_MODEL=qwen3.5-9b KEY=x
 
@@ -86,5 +100,6 @@ NARRATOR_REF = os.environ.get("DOCUPIPE_NARRATOR_REF", "/work/ref1.wav")  # path
 # subject (replaces the newsroom set so the expert reads as documentary, not TV anchor)
 INTERVIEW_BG = os.environ.get("DOCUPIPE_INTERVIEW_BG",
                               os.path.join(os.path.dirname(ROOT), "output", "study_pano.png"))
+LEGACY_STUDIO_ROOT = os.environ.get("DOCUPIPE_LEGACY_STUDIO_ROOT", "")
 DISCLOSURE = ("This program uses AI-assisted narration and restoration of public-domain archival "
               "material. Enhanced images are interpretations, not original artifacts.")

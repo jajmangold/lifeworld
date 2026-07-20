@@ -50,10 +50,9 @@ _SERIF_B = "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
 _SERIF_I = "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf"
 _SERIF = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"
 _SANS = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-# period assets shared with docgfx (IM Fell English letterpress serif + baked parchment)
-_IMFELL = os.path.join(config.ROOT, "docgfx", "fonts", "IMFellEnglish-Regular.ttf")
-_IMFELL_I = os.path.join(config.ROOT, "docgfx", "fonts", "IMFellEnglish-Italic.ttf")
-_PARCH = os.path.join(config.ROOT, "docgfx", "textures", "parchment.png")
+# Distribution-provided fonts and generated backgrounds keep publication assets provenance-safe.
+_PERIOD_SERIF = _SERIF
+_PERIOD_SERIF_I = _SERIF_I
 
 
 def normalize_image(image: str) -> str:
@@ -117,7 +116,7 @@ def ken_burns_segment(image, narration_wav, dur, out, zoom_in=True):
 
 
 def title_card(text: str, dur: float, out: str, subtitle: str = "", narration_wav=None):
-    """Period masthead title: dark IM Fell letterpress serif on foxed parchment, framed by an
+    """Period masthead title: dark serif on generated parchment, framed by an
     engraved double rule, finished with the archival grain + vignette (not a black slide)."""
     if cache.have(out):
         return out
@@ -126,20 +125,20 @@ def title_card(text: str, dur: float, out: str, subtitle: str = "", narration_wa
     lh = int(fs * 1.28)
     ink = "0x241a10"
     yc = "(h)/2-10"
-    draw = _stack(tlines, fs, ink, _IMFELL, lh, ycenter=yc)
+    draw = _stack(tlines, fs, ink, _PERIOD_SERIF, lh, ycenter=yc)
     # engraved double rule under the title (masthead), spanning the centre third
     block_h = lh * len(tlines)
     ry = f"(ih)/2-10+{block_h // 2 + 46}"   # drawbox: iw/ih are the FRAME dims (w/h = box dims)
     draw += (f",drawbox=x=(iw-560)/2:y={ry}:w=560:h=3:color={ink}@0.85:t=fill"
              f",drawbox=x=(iw-560)/2:y={ry}+9:w=560:h=1:color={ink}@0.6:t=fill")
     if subtitle:
-        draw += "," + _stack(_wrap_lines(subtitle, 46), 30, ink + "@0.8", _IMFELL_I, 44,
+        draw += "," + _stack(_wrap_lines(subtitle, 46), 30, ink + "@0.8", _PERIOD_SERIF_I, 44,
                              ycenter=f"(h)/2-10+{block_h // 2 + 90}")
     # parchment bg scaled to cover, slightly dimmed for contrast, then the archival finish
     fc = (f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
           f"eq=brightness=-0.04:contrast=1.02[bg];"
           f"[bg]{draw},noise=alls=7:allf=t+u,vignette=PI/5,format=yuv420p[v]")
-    args = ["-loop", "1", "-framerate", str(FPS), "-i", _PARCH]   # 30fps (default image loop=25 -> concat gaps)
+    args = ["-f", "lavfi", "-i", f"color=c=0xefe4cb:s={W}x{H}:r={FPS}"]
     if narration_wav:                       # real VO
         args += ["-i", narration_wav]
     else:                                   # silent track so concat keeps a uniform audio stream
@@ -222,9 +221,9 @@ def interview_segment(talking_mp4: str, name: str, title: str, out: str, dur=Non
     lt = (f"drawbox=x=0:y={y0}:w=iw:h=150:color=black@0.55:t=fill,"
           f"drawbox=x=90:y={y0 + 24}:w=6:h=100:color=0x7a3323:t=fill,"   # oxblood, not bright red
           f"drawtext=text='{_esc(name)}':fontcolor=0xF2E9D8:fontsize=46:x=130:y={y0 + 34}:"
-          f"fontfile={_IMFELL},"
+          f"fontfile={_PERIOD_SERIF},"
           f"drawtext=text='{_esc(title)}':fontcolor=0xC9B79A:fontsize=28:x=132:y={y0 + 92}:"
-          f"fontfile={_IMFELL_I}")
+          f"fontfile={_PERIOD_SERIF_I}")
     # documentary interviews read present-day, but warm/filmic — not sterile broadcast: warm the
     # whites, lift shadows slightly, desaturate the harsh blues, add a touch of film grain.
     vf = (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"

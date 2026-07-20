@@ -1,0 +1,10 @@
+{
+  "name": "docgfx",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Deterministic documentary motion-graphics renderer (SVG -> resvg -> frames)",
+  "dependencies": {
+    "@resvg/resvg-js": "2.6.2"
+  }
+}

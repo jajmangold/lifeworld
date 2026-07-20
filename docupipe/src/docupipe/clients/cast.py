@@ -6,7 +6,7 @@ import os
 import urllib.request
 from .. import config, cache
 
-BOT_OUT = "/srv/nvme-data/containers/live/studio/output"
+BOT_OUT = os.path.join(config.LEGACY_STUDIO_ROOT, "output")
 
 # voice refs are paths inside the qwen3-tts server (amd1 voxserver) (/work/*). ref1=deep male narrator (reserved).
 # A small ENSEMBLE of experts with DISTINCT lenses, so interview cutaways add perspective/friction
@@ -40,6 +40,8 @@ PORTRAIT_NEG = "cartoon, illustration, painting, cgi, deformed, extra fingers, t
 
 def portrait(researcher, seed=42) -> str:
     """Generate/caches a photoreal headshot; returns a path staged in bot/output (for --face)."""
+    if not config.LEGACY_STUDIO_ROOT:
+        raise RuntimeError("legacy studio adapter is not configured")
     r = researcher
     ck = cache.path("portrait", cache.key("por", r["id"], r["look"], seed), "png")
     if not cache.have(ck):

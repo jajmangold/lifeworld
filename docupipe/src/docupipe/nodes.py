@@ -584,9 +584,11 @@ def render_segment(state):
     elif shot == "interview":                       # talking-head researcher (news pipeline)
         r = cast.BY_ID.get(seg.get("speaker") or "hale", cast.RESEARCHERS[0])
         try:
-            port = cast.portrait(r)                  # Z-Image headshot (cached)
-            bg = config.INTERVIEW_BG if os.path.isfile(config.INTERVIEW_BG) else None
-            th = anchor.talking_head(port, wav, clip, bg=bg) if anchor.available() else ""
+            th = ""
+            if anchor.available():
+                port = cast.portrait(r)              # Z-Image headshot (cached)
+                bg = config.INTERVIEW_BG if os.path.isfile(config.INTERVIEW_BG) else None
+                th = anchor.talking_head(port, wav, clip, bg=bg)
             if th:                                   # make_anchor: swap face + MuseTalk + restore
                 media.interview_segment(th, r["name"], r["title"], clip)
                 cue.append(f"Segment {sid}: researcher interview ({r['name']}, {r['title']})")

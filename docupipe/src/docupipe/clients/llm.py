@@ -6,10 +6,16 @@ import urllib.request
 from .. import config, cache
 
 
+class CompletionLengthError(RuntimeError):
+    """The model exhausted its output budget before producing a complete answer."""
+
+
 def chat(tier: str, system: str, user: str, *, temperature=0.4, max_tokens=4000,
          json_mode=False, use_cache=True, retries=3):
     cfg = config.LLM[tier]
-    ck = cache.key("llm", tier, cfg["model"], system, user, temperature, json_mode)
+    ck = cache.key(
+        "llm", tier, cfg["model"], system, user, temperature, max_tokens, json_mode
+    )
     cp = cache.path("llm", ck, "json")
     if use_cache and cache.have(cp):
         return cache.load_json(cp)["content"]
@@ -40,13 +46,19 @@ def chat(tier: str, system: str, user: str, *, temperature=0.4, max_tokens=4000,
             with urllib.request.urlopen(req, timeout=180) as r:
                 out = json.load(r)
             choice = out["choices"][0]
+            reason = choice.get("finish_reason", "unknown")
+            if reason == "length":
+                raise CompletionLengthError(
+                    f"completion exhausted max_tokens={max_tokens} before finishing"
+                )
             content = choice["message"]["content"]
             if not (content or "").strip():
-                reason = choice.get("finish_reason", "unknown")
                 raise RuntimeError(f"empty completion (finish_reason={reason})")
             if use_cache:
                 cache.save_json(cp, {"content": content})
             return content
+        except CompletionLengthError:
+            raise
         except Exception as e:  # noqa
             last = e
             time.sleep(2 * (attempt + 1))
@@ -74,6 +86,8 @@ def chat_json(tier: str, system: str, user: str, **kw):
             return _parse_json(chat(tier, system, user, json_mode=True,
                                     use_cache=(kw.get("use_cache", True) and attempt == 0),
                                     **{k: v for k, v in kw.items() if k != "use_cache"}))
+        except CompletionLengthError:
+            raise
         except Exception:
             if attempt == 2:
                 raise

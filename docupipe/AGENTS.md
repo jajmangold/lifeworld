@@ -13,10 +13,15 @@ researcher cutaways (`cast`, `anchor`) and premium FlashVSR superscale are heavi
 
 ## Run
 ```bash
-cd docupipe/src
+cd docupipe
+uv sync --locked
+uv run docupipe --topic "The Axeman of New Orleans" --auto       # end-to-end, auto-approve script
+uv run docupipe --resume <job_id>                                # inspect a paused job's script
+uv run docupipe --resume <job_id> --approve                      # approve script & finish render
+
+# Direct source invocation is also supported after sync.
+cd src
 python -m docupipe.run --topic "The Axeman of New Orleans" --auto   # end-to-end, auto-approve script
-python -m docupipe.run --resume <job_id>                            # inspect a paused job's script
-python -m docupipe.run --resume <job_id> --approve                  # approve script & finish render
 ```
 State + checkpoints live in a SQLite DB (`data/docupipe.sqlite`); jobs are resumable. Config is all
 env-overridable (`config.py`) — LLM defaults to cloud DeepSeek, services default to on-box HTTP.
@@ -24,8 +29,16 @@ OpenCode Go credentials resolve from the tier-specific key, `OPENCODE_GO_API_KEY
 configured `DOCUPIPE_OPENCODE_GO_TOKEN_FILE`, then the OpenCode auth file. Runtime container trees
 are never credential sources. The LLM client sends the declared `HTTP_UA`; OpenCode Go rejects
 Python urllib's default user agent even when the bearer credential is valid.
+OpenCode fallback credentials are restricted to the canonical OpenCode Go URL. A custom bulk or
+writer URL must have its own explicit tier key; never forward the OpenCode credential to it.
 DeepSeek V4 writing calls use explicit high-effort thinking. Treat `reasoning_content` as internal
-model output, require nonempty final `content`, and budget `max_tokens` for both.
+model output, require nonempty final `content`, and budget `max_tokens` for both. Token exhaustion
+is terminal for that request and must be retried only by an explicit caller with a larger budget.
+The old face-swap/MuseTalk talking-head path is an opt-in fallback. It has no default filesystem
+location; set `DOCUPIPE_LEGACY_STUDIO_ROOT` only for a separately qualified legacy checkout.
+Install Docgfx dependencies with `npm ci --prefix docgfx`; `node_modules` is never committed.
+Docgfx uses distribution fonts and source-controlled procedural textures, not the unproven font
+and bitmap assets found in the retired runtime tree.
 
 ## Architecture
 - **`state.py`** — `DocuState` TypedDict, flat and paths-not-bytes; fan-in keys (`dossiers`,

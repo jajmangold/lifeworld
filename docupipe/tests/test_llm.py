@@ -91,11 +91,25 @@ class LLMClientTests(unittest.TestCase):
                 clear=True,
             ),
             mock.patch.object(llm.cache, "have", return_value=False),
-            mock.patch.object(llm.urllib.request, "urlopen", return_value=response),
+            mock.patch.object(
+                llm.urllib.request, "urlopen", return_value=response
+            ) as urlopen,
             mock.patch.object(llm.time, "sleep"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "finish_reason=length"):
-                llm.chat("writer", "system", "user", use_cache=False, retries=1)
+            with self.assertRaisesRegex(llm.CompletionLengthError, "max_tokens=4000"):
+                llm.chat("writer", "system", "user", use_cache=False, retries=3)
+
+        urlopen.assert_called_once()
+
+    def test_chat_json_does_not_retry_token_exhaustion(self):
+        with mock.patch.object(
+            llm,
+            "chat",
+            side_effect=llm.CompletionLengthError("budget exhausted"),
+        ) as chat:
+            with self.assertRaisesRegex(llm.CompletionLengthError, "budget exhausted"):
+                llm.chat_json("writer", "system", "user")
+        chat.assert_called_once()
 
 
 if __name__ == "__main__":

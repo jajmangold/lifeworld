@@ -5,12 +5,12 @@ import os
 import subprocess
 from .. import config, cache
 
-BOT = "/srv/nvme-data/containers/live/studio"
+BOT = config.LEGACY_STUDIO_ROOT
 BOT_OUT = os.path.join(BOT, "output")
 
 
 def available() -> bool:
-    if not os.path.isfile(os.path.join(BOT, "make_anchor.sh")):
+    if not BOT or not os.path.isfile(os.path.join(BOT, "make_anchor.sh")):
         return False
     try:
         out = subprocess.run(["docker", "ps", "--format", "{{.Names}}"],
