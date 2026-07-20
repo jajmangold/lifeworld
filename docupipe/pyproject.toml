@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=80,<81"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "content-factory-docupipe"
+version = "0.1.0"
+description = "LangGraph documentary production pipeline"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "langgraph==1.2.7",
+  "langgraph-checkpoint-sqlite==3.1.0",
+  "typing-extensions==4.15.0",
+]
+
+[project.scripts]
+docupipe = "docupipe.run:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
