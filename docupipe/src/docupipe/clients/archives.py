@@ -28,6 +28,25 @@ def _download(url, dest):
 # ── Wikimedia Commons ────────────────────────────────────────────────
 _OK_LIC = re.compile(r"(public domain|pd-|cc0|cc-by|cc by|attribution)", re.I)
 _BAD_LIC = re.compile(r"(non.?commercial|cc-by-nc|no.?deriv|fair use|copyright)", re.I)
+_LOC_OK = re.compile(r"(public domain|no known restrictions|free to use and reuse)", re.I)
+_LOC_BAD = re.compile(r"(permission|required|restricted|copyright|rights status not evaluated)", re.I)
+
+
+def _strings(value):
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [text for item in value for text in _strings(item)]
+    return []
+
+
+def _loc_rights(item):
+    statements = []
+    for record in (item, item.get("item") or {}):
+        statements.extend(_strings(record.get("rights_advisory")))
+        statements.extend(_strings(record.get("rights")))
+    text = " | ".join(statement.strip() for statement in statements if statement.strip())
+    return text, bool(text and _LOC_OK.search(text) and not _LOC_BAD.search(text))
 
 
 def commons_search(query, n=8):
@@ -68,15 +87,23 @@ def loc_search(query, n=8):
         return []
     out = []
     for it in (data.get("results", []) or [])[:n]:
+        item_url = it.get("id", "")
+        try:
+            detail = _get_json(item_url.rstrip("/") + "/?fo=json") if item_url else {}
+        except Exception:
+            continue
+        rights, rights_ok = _loc_rights(detail)
+        if not rights_ok:
+            continue
         img = it.get("image_url") or []
         full = ("https:" + img[-1]) if img and img[-1].startswith("//") else (img[-1] if img else "")
         if not full:
             continue
         out.append({
             "source": "library_of_congress", "title": it.get("title", ""),
-            "page_url": it.get("id", ""), "image_url": full, "full_url": full,
-            "license": "LoC — no known restrictions", "attribution": "Library of Congress",
-            "rights_ok": True})
+            "page_url": item_url, "image_url": full, "full_url": full,
+            "license": rights, "attribution": "Library of Congress",
+            "rights_ok": rights_ok})
     return out
 
 

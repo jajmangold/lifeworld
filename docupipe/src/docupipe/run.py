@@ -21,6 +21,12 @@ def _slug(s):
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")[:48]
 
 
+def _job_id(value):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}", value or ""):
+        raise ValueError("job id must match [a-z0-9][a-z0-9_-]{0,47}")
+    return value
+
+
 def _drain(graph, payload, cfg):
     """Stream node updates, return True if paused on an interrupt.
     (Per-node progress is printed directly by nodes._progress; the multi-mode
@@ -48,7 +54,10 @@ def main():
         graph = build().compile(checkpointer=cp)
 
         if args.resume:
-            job = args.resume
+            try:
+                job = _job_id(args.resume)
+            except ValueError as exc:
+                ap.error(str(exc))
             cfg = {"configurable": {"thread_id": job}, "max_concurrency": 1}
             st = graph.get_state(cfg)
             if args.approve or args.auto:
@@ -63,7 +72,10 @@ def main():
         else:
             if not args.topic:
                 ap.error("--topic required")
-            job = args.job or _slug(args.topic)
+            try:
+                job = _job_id(args.job) if args.job else _job_id(_slug(args.topic))
+            except ValueError as exc:
+                ap.error(str(exc))
             cfg = {"configurable": {"thread_id": job}, "max_concurrency": 1}
             print(f"[job] {job}  topic={args.topic!r}")
             paused = _drain(graph, {"job_id": job, "topic": args.topic}, cfg)

@@ -345,8 +345,8 @@ EDITOR_SYS = (
     "scene reconstruction, subtext — not a dry recap? (6) Everything grounded (no invented facts/quotes)? "
     "(7) A strong cold open and a resonant close?\n"
     "Rewrite weak beats IN PLACE (sharpen VO, add a human detail, fix a confusing jump, strengthen a "
-    "thread hand-off). Keep the same beat objects/shape and shot_types; you may split or merge a beat "
-    "or adjust ordering for clarity, but keep it grounded and keep the runtime near target. No 'AI' notes.\n"
+    "thread hand-off). Return the same number of beats in the same order. Preserve every structured "
+    "visual field and shot_type exactly; change only editorial text fields. No 'AI' notes.\n"
     "PRESERVE THE VISUAL GRAMMAR: most beats are narrator VO over archival images "
     "(photo/newspaper/map/letter/timeline/evidence/stat); interviews stay OCCASIONAL (~one per act). "
     "Do NOT convert narration beats into interviews, and do not collapse the shot-type variety.\n"
@@ -358,15 +358,13 @@ EDITOR_SYS = (
 def script_editor_node(state):
     segs = state.get("segments", [])
     topic = state["topic"]
-    cp = cache.path("node_editor", cache.key(topic, config.EDITOR_PASSES,
-                                             [s["narration"] for s in segs]), "json")
+    cp = cache.path("node_editor", cache.key("v2", topic, config.EDITOR_PASSES, segs), "json")
     if cache.have(cp):
         out = cache.load_json(cp)
         _progress(stage="editor", msg=f"cached: scores {out.get('notes', {}).get('scores', {})}")
         return {"segments": out["segments"], "editor_notes": out.get("notes", {})}
     b = state.get("story_bible", {})
-    cur = json.dumps([{k: s[k] for k in ("kind", "narration", "shot_type", "speaker", "quote",
-                                         "image_query") if s.get(k)} for s in segs])[:24000]
+    cur = json.dumps(segs)[:24000]
     notes, out_segs = {}, segs
     for p in range(max(1, config.EDITOR_PASSES)):
         _progress(stage="editor", msg=f"showrunner pass {p+1}")
@@ -381,13 +379,19 @@ def script_editor_node(state):
         except Exception:
             break
         new = res.get("segments")
-        if new:
-            out_segs = [_norm_seg(s, i, topic) for i, s in enumerate(new)]
+        if new and len(new) == len(out_segs):
+            merged = []
+            for old, revised in zip(out_segs, new):
+                beat = dict(old)
+                for key in ("kind", "narration", "speaker", "quote", "image_query"):
+                    if key in revised:
+                        beat[key] = revised[key]
+                merged.append(beat)
+            out_segs = [_norm_seg(s, i, topic) for i, s in enumerate(merged)]
             if out_segs:
                 out_segs[0]["kind"] = "cold_open"
             out_segs = _cap_interviews(out_segs)
-            cur = json.dumps([{k: s[k] for k in ("kind", "narration", "shot_type", "speaker",
-                              "quote", "image_query") if s.get(k)} for s in out_segs])[:24000]
+            cur = json.dumps(out_segs)[:24000]
         notes = res.get("notes", {})
     cache.save_json(cp, {"segments": out_segs, "notes": notes})
     _progress(stage="editor", msg=f"scores {notes.get('scores', {})}")
@@ -402,7 +406,7 @@ def curate_node(state):
     per beat. Beats marked 'letter' stay quote cards. Decided before the expensive render."""
     segs = [dict(s) for s in state["segments"]]
     topic = state["topic"]
-    cp = cache.path("node_curate", cache.key(topic, [s["image_query"] for s in segs]), "json")
+    cp = cache.path("node_curate", cache.key("v2", topic, [s["image_query"] for s in segs]), "json")
     if cache.have(cp):
         _progress(stage="curate", msg="cached")
         return {"segments": cache.load_json(cp)}
@@ -531,6 +535,11 @@ def curate_node(state):
                     best, bv = c, v
             if best:
                 nd["img"] = os.path.abspath(best["_path"])
+                nd["asset"] = {
+                    k: best[k] for k in (
+                        "source", "title", "page_url", "license", "attribution", "rights_ok"
+                    ) if k in best
+                }
                 used[id(best)] = used.get(id(best), 0) + 1
     cache.save_json(cp, segs)
     placed = sum(1 for s in segs if s.get("image_path"))

@@ -36,6 +36,7 @@ model output, require nonempty final `content`, and budget `max_tokens` for both
 is terminal for that request and must be retried only by an explicit caller with a larger budget.
 The old face-swap/MuseTalk talking-head path is an opt-in fallback. It has no default filesystem
 location; set `DOCUPIPE_LEGACY_STUDIO_ROOT` only for a separately qualified legacy checkout.
+Presenton is also opt-in and requires `DOCUPIPE_PRESENTON_AUTH`; no credential is committed.
 Install Docgfx dependencies with `npm ci --prefix docgfx`; `node_modules` is never committed.
 Docgfx uses distribution fonts and source-controlled procedural textures, not the unproven font
 and bitmap assets found in the retired runtime tree.
@@ -73,6 +74,9 @@ researcher cutaways via the news pipeline).
   `config.py`); keep the resilient "return original on failure + cache" contract intact.
 - Provenance is load-bearing: never emit an image without a resolved `rights_ok` asset, and keep the
   cue-sheet / disclosure path — `provenance.gate()` gates assembly.
+- Library of Congress access metadata is not a license. LoC candidates fail closed unless their
+  item metadata includes an explicit safe rights statement; evidence-board images are gated and
+  credited individually.
 - Fan-in state keys must keep their `operator.add` reducers or parallel render writes clobber.
 - Prefer editing nodes/graph over the state contract; a `DocuState` change ripples to every node.
 - Distinct from the news-anchor path — this is the long-form docuseries generator. Global rules

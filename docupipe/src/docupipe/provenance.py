@@ -3,13 +3,21 @@ import os
 from . import config
 
 
+def _visual_assets(segment):
+    if segment.get("image_path"):
+        yield f"segment {segment.get('id')}", segment.get("asset") or {}
+    for index, node in enumerate(segment.get("nodes") or []):
+        if isinstance(node, dict) and node.get("img"):
+            yield f"segment {segment.get('id')} evidence node {index}", node.get("asset") or {}
+
+
 def gate(segments) -> list:
     """Return list of rights problems; empty = OK to assemble."""
     problems = []
     for s in segments:
-        a = s.get("asset")
-        if s.get("image_path") and (not a or not a.get("rights_ok")):
-            problems.append(f"segment {s.get('id')}: image has unresolved rights")
+        for location, asset in _visual_assets(s):
+            if not asset.get("rights_ok"):
+                problems.append(f"{location}: image has unresolved rights")
     return problems
 
 
@@ -17,12 +25,12 @@ def credits_text(segments, cue_sheet) -> str:
     lines = ["SOURCES & ATTRIBUTIONS", ""]
     seen = set()
     for s in segments:
-        a = s.get("asset") or {}
-        key = (a.get("attribution"), a.get("title"))
-        if a and key not in seen:
-            seen.add(key)
-            lines.append(f"• {a.get('title','(image)')} — {a.get('attribution','')} "
-                         f"[{a.get('license','')}] {a.get('page_url','')}")
+        for _, asset in _visual_assets(s):
+            key = (asset.get("attribution"), asset.get("title"))
+            if asset and key not in seen:
+                seen.add(key)
+                lines.append(f"• {asset.get('title','(image)')} — {asset.get('attribution','')} "
+                             f"[{asset.get('license','')}] {asset.get('page_url','')}")
     return "\n".join(lines)
 
 

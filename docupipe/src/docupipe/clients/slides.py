@@ -8,12 +8,14 @@ import urllib.request
 from .. import config, cache
 
 PRESENTON_URL = os.environ.get("DOCUPIPE_PRESENTON_URL", "http://localhost:5001")
-PRESENTON_AUTH = os.environ.get("DOCUPIPE_PRESENTON_AUTH", "admin:docupipe1")
+PRESENTON_AUTH = os.environ.get("DOCUPIPE_PRESENTON_AUTH", "")
 # Presenton writes to /app_data (container) == presenton_data (host)
 DATA_HOST = os.path.join(config.ROOT, "presenton_data")
 
 
 def available() -> bool:
+    if not PRESENTON_AUTH:
+        return False
     try:
         req = urllib.request.Request(PRESENTON_URL.rstrip("/") + "/api/v1/auth/status")
         req.add_header("Authorization", "Basic " + base64.b64encode(PRESENTON_AUTH.encode()).decode())
@@ -25,6 +27,8 @@ def available() -> bool:
 
 def deck_pages(content: str, n_slides=4, tone="educational") -> list:
     """Generate a deck and return a list of PNG page paths (host), or [] on failure."""
+    if not PRESENTON_AUTH:
+        return []
     ck = cache.path("deck", cache.key("deck", content, n_slides), "json")
     if cache.have(ck):
         pages = cache.load_json(ck)
