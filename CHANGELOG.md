@@ -44,6 +44,10 @@ Date-stamp a release when a roadmap milestone ships.
   `/mnt/24tb/nvme-offload/bot-archive/render-experiments/` (superseded by the LTX-2.3 SDNQ farm + a2v_talk).
 
 ### Fixed
+- Docupipe now defaults bulk and writer generation to OpenCode Go DeepSeek V4 Flash and resolves its
+  credential from explicit environment, token-file, or OpenCode auth-file sources. Removed the
+  retired `/srv/nvme-data/containers` and `/home/josh/containers` credential dependencies, and send
+  Docupipe's declared user agent because OpenCode Go rejects Python urllib's default identity.
 - `newscast/review.py` empty-output bug (amd0's qwen3.5 needs `enable_thinking:false` or content lands in
   `reasoning_content`).
 

@@ -76,6 +76,11 @@ finishing path; **newscast/** does script+TTS+graphics; **NNS** brand. See `rend
   - Done-when: 5 consecutive segments produced unattended, each passing E0.3/E0.4 gates, logged.
 
 ### E0.3 — Original-analysis script + compliance gates (SURVIVAL — see STRATEGY §3)
+- **[T0.3d] Preserve Docupipe DeepSeek V4 Flash writer credentials** · P0 · done
+  - Ships: the legacy Docupipe writer remains reproducible after the retired containers tree is gone.
+  - Depends-on: —
+  - Done-when: writer routing is committed, no credential comes from a containers path, precedence is
+    tested, and the behavior is documented. Tracked externally by content-factory#128.
 - **[T0.3a] Script adds original analysis (no verbatim)** · P0 · todo
   - Ships: monetization-safe scripts (verbatim wire-reading = channel demonetization).
   - Depends-on: —

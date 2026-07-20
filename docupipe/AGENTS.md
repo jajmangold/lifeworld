@@ -20,6 +20,12 @@ python -m docupipe.run --resume <job_id> --approve                  # approve sc
 ```
 State + checkpoints live in a SQLite DB (`data/docupipe.sqlite`); jobs are resumable. Config is all
 env-overridable (`config.py`) — LLM defaults to cloud DeepSeek, services default to on-box HTTP.
+OpenCode Go credentials resolve from the tier-specific key, `OPENCODE_GO_API_KEY`, an explicitly
+configured `DOCUPIPE_OPENCODE_GO_TOKEN_FILE`, then the OpenCode auth file. Runtime container trees
+are never credential sources. The LLM client sends the declared `HTTP_UA`; OpenCode Go rejects
+Python urllib's default user agent even when the bearer credential is valid.
+DeepSeek V4 writing calls use explicit high-effort thinking. Treat `reasoning_content` as internal
+model output, require nonempty final `content`, and budget `max_tokens` for both.
 
 ## Architecture
 - **`state.py`** — `DocuState` TypedDict, flat and paths-not-bytes; fan-in keys (`dossiers`,

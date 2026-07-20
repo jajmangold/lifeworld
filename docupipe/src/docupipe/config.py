@@ -11,32 +11,34 @@ for _d in (CACHE_DIR, ASSETS_DIR, RENDERS_DIR, EPISODES_DIR):
     os.makedirs(_d, exist_ok=True)
 
 # ── LLM (OpenAI-compatible). Default writer path is OpenCode Go DeepSeek V4 Flash.
-def _deepseek_key():
-    k = os.environ.get("DEEPSEEK_API_KEY", "")
-    if not k and os.path.isfile("/srv/nvme-data/containers/.env"):
-        for line in open("/srv/nvme-data/containers/.env"):
-            if line.startswith("DEEPSEEK_API_KEY"):
-                k = line.split("=", 1)[1].strip().strip('"').strip("'")
-    return k
-
 def _opencode_go_key():
     k = os.environ.get("OPENCODE_GO_API_KEY", "")
-    if not k and os.path.isfile("/home/josh/containers/projects/fused_ni8/tempkey.txt"):
-        k = open("/home/josh/containers/projects/fused_ni8/tempkey.txt").read().strip()
-    if not k and os.path.isfile("/home/josh/.local/share/opencode/auth.json"):
+    token_file = os.environ.get("DOCUPIPE_OPENCODE_GO_TOKEN_FILE", "")
+    if not k and token_file:
+        with open(token_file, encoding="utf-8") as source:
+            k = source.read().strip()
+    auth_file = os.path.expanduser(
+        os.environ.get("DOCUPIPE_OPENCODE_AUTH_FILE", "~/.local/share/opencode/auth.json")
+    )
+    if not k and os.path.isfile(auth_file):
         import json
-        auth = json.load(open("/home/josh/.local/share/opencode/auth.json"))
+        with open(auth_file, encoding="utf-8") as source:
+            auth = json.load(source)
         k = (auth.get("opencode-go") or {}).get("key", "")
     return k
+
+
+def _tier_key(name):
+    return os.environ.get(name, "") or _opencode_go_key()
 
 # "bulk" tier (research/outline) and "writer" tier (script).
 LLM = {
     "bulk":   {"base_url": os.environ.get("DOCUPIPE_BULK_URL",   "https://opencode.ai/zen/go/v1"),
                "model":    os.environ.get("DOCUPIPE_BULK_MODEL", "deepseek-v4-flash"),
-               "key":      os.environ.get("DOCUPIPE_BULK_KEY",   _opencode_go_key() or _deepseek_key())},
+               "key":      _tier_key("DOCUPIPE_BULK_KEY")},
     "writer": {"base_url": os.environ.get("DOCUPIPE_WRITER_URL",   "https://opencode.ai/zen/go/v1"),
                "model":    os.environ.get("DOCUPIPE_WRITER_MODEL", "deepseek-v4-flash"),
-               "key":      os.environ.get("DOCUPIPE_WRITER_KEY",   _opencode_go_key() or _deepseek_key())},
+               "key":      _tier_key("DOCUPIPE_WRITER_KEY")},
 }
 # local example (once lm-stack up): DOCUPIPE_BULK_URL=http://localhost:8047/v1 BULK_MODEL=qwen3.5-9b KEY=x
 

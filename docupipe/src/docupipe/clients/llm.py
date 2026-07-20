@@ -20,6 +20,12 @@ def chat(tier: str, system: str, user: str, *, temperature=0.4, max_tokens=4000,
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
+    if cfg["model"] in {"deepseek-v4-flash", "deepseek-v4-pro"}:
+        # DeepSeek V4 thinking ignores sampling controls and counts reasoning
+        # against max_tokens. Only final content is a Docupipe artifact.
+        body.pop("temperature")
+        body["thinking"] = {"type": "enabled"}
+        body["reasoning_effort"] = "high"
     if json_mode:
         body["response_format"] = {"type": "json_object"}
     data = json.dumps(body).encode()
@@ -29,12 +35,15 @@ def chat(tier: str, system: str, user: str, *, temperature=0.4, max_tokens=4000,
             req = urllib.request.Request(
                 cfg["base_url"].rstrip("/") + "/chat/completions", data=data,
                 headers={"Content-Type": "application/json",
+                         "User-Agent": config.HTTP_UA,
                          "Authorization": "Bearer " + (cfg["key"] or "x")})
             with urllib.request.urlopen(req, timeout=180) as r:
                 out = json.load(r)
-            content = out["choices"][0]["message"]["content"]
+            choice = out["choices"][0]
+            content = choice["message"]["content"]
             if not (content or "").strip():
-                raise RuntimeError("empty completion")     # transient -> retry, never cache
+                reason = choice.get("finish_reason", "unknown")
+                raise RuntimeError(f"empty completion (finish_reason={reason})")
             if use_cache:
                 cache.save_json(cp, {"content": content})
             return content
