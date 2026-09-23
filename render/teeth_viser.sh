@@ -7,8 +7,8 @@ NAME=teeth-viser
 if [ "${1:-}" = "stop" ]; then docker rm -f $NAME 2>/dev/null && echo stopped; exit 0; fi
 docker rm -f $NAME 2>/dev/null || true
 docker run -d --name $NAME -e PYTHONPATH=/work -p 8772:8772 \
-  -v /srv/nvme-data/containers/projects/sampl:/work \
-  -v /srv/nvme-data/containers/projects/bot:/lw \
+  -v "${LIFEWORLD_SAMPLES_DIR:-./samples}":/work \
+  -v "${LIFEWORLD_BOT_DIR:-./bot}":/lw \
   lifeworld-viser python3 /lw/render/teeth_viser.py >/dev/null
 echo "starting (baking Theo ~15s)…"
 for i in $(seq 1 40); do

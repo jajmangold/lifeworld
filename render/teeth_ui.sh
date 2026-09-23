@@ -8,9 +8,9 @@ if [ "${1:-}" = "stop" ]; then docker rm -f $NAME 2>/dev/null && echo "stopped";
 docker rm -f $NAME 2>/dev/null || true
 docker run -d --name $NAME --gpus device=7 -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONPATH=/work \
   -p 8771:8771 \
-  -v /srv/nvme-data/containers/projects/sampl:/work \
-  -v /srv/nvme-data/containers/projects/bot:/lw \
-  -v /mnt/24tb/a2f:/a2f \
+  -v "${LIFEWORLD_SAMPLES_DIR:-./samples}":/work \
+  -v "${LIFEWORLD_BOT_DIR:-./bot}":/lw \
+  -v "${A2F_DIR:-./a2f}":/a2f \
   lifeworld-preview python3 /lw/render/teeth_ui_live.py >/dev/null
 echo "starting teeth-ui (warming the body ~10s)…"
 for i in $(seq 1 30); do

@@ -14,8 +14,8 @@ import sys
 import urllib.request
 import wave
 
-SAMPL = "/srv/nvme-data/containers/projects/sampl"
-BOT = "/srv/nvme-data/containers/projects/bot"
+SAMPL = os.environ.get("LIFEWORLD_SAMPLES_DIR", "./samples")
+BOT = os.environ.get("LIFEWORLD_BOT_DIR", "./bot")
 SCENE = f"{SAMPL}/output/scene"          # shared via /work mount
 HIGGS, LAM = "http://127.0.0.1:8055", "http://127.0.0.1:8202"
 FPS = 24
@@ -29,7 +29,7 @@ CAST = [
     {"name": "Priya", "gender": "female", "betas": [-1.2, -0.5, 0, 0, 0, 0, 0, 0, 0, 0],
      "pos": [0.9, 0.0],  "yaw_deg": -22, "tex": "f", "voice": None, "a2f_id": "Claire"},
 ]
-A2F_DIR = "/mnt/24tb/a2f"
+A2F_DIR = os.environ.get("A2F_DIR", "./a2f")
 PERSONA = {"Mara": "tidy, anxious, protective of her food",
            "Theo": "easygoing, forgetful musician, sheepish",
            "Priya": "blunt, funny peacemaker"}

@@ -5,8 +5,8 @@
 #   render/float.sh health | stop | logs
 set -e
 NAME=float-server; PORT=8217; GPU=${FLOAT_GPU:-9}
-FLOATDIR=/srv/nvme-data/containers/projects/sampl/tools/float
-IO=/srv/nvme-data/containers/projects/bot/output          # shared io: host <-> /io in container
+FLOATDIR="${LIFEWORLD_SAMPLES_DIR:-./samples}/tools/float"
+IO="${LIFEWORLD_BOT_DIR:-./bot}/output"                    # shared io: host <-> /io in container
 
 case "$1" in
 server)

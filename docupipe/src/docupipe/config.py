@@ -58,17 +58,17 @@ LLM = {
 
 # ── On-box services
 SEARXNG_URL = os.environ.get("DOCUPIPE_SEARXNG_URL", "http://localhost:8088")  # grounded web search (JSON)
-TTS_URL    = os.environ.get("DOCUPIPE_TTS_URL", "http://amd1:8064")           # qwen3-tts voxserver on amd1
+TTS_URL    = os.environ.get("DOCUPIPE_TTS_URL", "http://localhost:8064")         # qwen3-tts voxserver
 ESRGAN_URL = os.environ.get("DOCUPIPE_ESRGAN_URL", "http://127.0.0.1:8197")   # ComfyUI upscale
 ACESTEP_URL = os.environ.get("DOCUPIPE_ACESTEP_URL", "http://localhost:7861")
 # Vision judge / chat: Qwen3.5-9B on amd0 (OpenAI /v1) — the ONE qwen9b for all vision-QA + chat.
-VISION_URL = os.environ.get("DOCUPIPE_VISION_URL", "https://amd0.python-bull.ts.net/v1")
+VISION_URL = os.environ.get("DOCUPIPE_VISION_URL", "http://localhost:8040/v1")
 VISION_MODEL = os.environ.get("DOCUPIPE_VISION_MODEL", "Qwen3.5-9B-UD-Q4_K_XL.gguf")
 # Z-Image Turbo (A1111 sdapi) for generative period illustrations (no-image beats).
-ZIMAGE_URL = os.environ.get("DOCUPIPE_ZIMAGE_URL", "http://172.30.0.14:9000")
+ZIMAGE_URL = os.environ.get("DOCUPIPE_ZIMAGE_URL", "http://localhost:9000")
 # FlashVSR premium superscale — resident server on rtx0 (warm pipeline, HTTP).
-RTX0_SSH = os.environ.get("DOCUPIPE_RTX0_SSH", "josh@rtx0")
-FLASHVSR_URL = os.environ.get("DOCUPIPE_FLASHVSR_URL", "http://rtx0:8800")  # async queue coordinator
+RTX0_SSH = os.environ.get("DOCUPIPE_RTX0_SSH", "josh@localhost")
+FLASHVSR_URL = os.environ.get("DOCUPIPE_FLASHVSR_URL", "http://localhost:8800")  # async queue coordinator
 PREMIUM_UPSCALE = os.environ.get("DOCUPIPE_PREMIUM_UPSCALE", "0") == "1"  # FlashVSR vs fast ESRGAN
 
 # ── Render spec (docuseries craft defaults)

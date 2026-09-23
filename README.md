@@ -1,74 +1,87 @@
 # lifeworld
 
-Autonomous SMPL-X **humans that live lives** in a simulated world, remember
-through a graph, and whose selected moments are rendered cinematically.
+**Autonomous SMPL-X humanoid NPCs that live lives.**
 
-Agents perceive a real 3D world through virtual sensors, decide with an LLM
-"neocortex", remember in a graph database, speak/hear, and act through embodied
-SMPL-X humanoids. Selected story beats are re-rendered in film-quality Blender.
+Agents perceive a simulated 3D world (Habitat 3.0), decide via DeepSeek V4 Flash, remember in a Neo4j graph, and get rendered cinematically in Blender. Two subsystems: **lifeworld** (NPC simulation) and **docupipe** (documentary production pipeline).
 
-> Status: **core vertical working** (validated 2026-06-21 on the V100 fleet). The full
-> loop runs end to end — see "What works" below.
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## What works (validated, all on sm_70 V100, headless)
+## What it does
 
-| Milestone | What runs | Artifact |
-|-----------|-----------|----------|
-| **M1** embodiment | `world/habitat_walk.py` — humanoid walks ReplicaCAD; RGB+depth+semantic sensors | `output/habitat_walk.mp4`, `M1_*.png` |
-| **M2** mind loop | `world/habitat_mind.py` — perceive → DeepSeek decides → navigate → log Neo4j | `output/mind.mp4` |
-| **M3 text** society | `mind/society.py` — personas + seeded conflict → DeepSeek storyline + FEELS graph | Neo4j storyline |
-| **M3 embodied** | `world/habitat_social.py` — two humanoids co-present + logged conversation | `output/social_twoshot.png` |
-| **Capstone** | `render/make_talk.sh "<line>"` — a Neo4j storyline line → lip-synced SMPL-X clip | `output/beat_mara_confront.mp4` |
-| **Render core** | `render/render_smplx.py` — Blender-free GPU SMPL-X (pyrender/EGL) | `output/walk.mp4` |
+```mermaid
+graph LR
+    A[Habitat 3.0<br/>RGB + Depth + Semantic] --> B[Qwen VLM<br/>Visual Cortex]
+    B --> C[DeepSeek V4 Flash<br/>Decision Engine]
+    C --> D[Habitat Action API<br/>Navigate / Move / Speak]
+    D --> E[Neo4j<br/>Life-Record & Social Graph]
+    D --> F[Blender Cycles<br/>Cinematic Render]
+    E --> G[Storyline Beats<br/>Auto-Director]
+    G --> F
+```
 
-Run the embodied/mind/social pieces in `lifeworld-habitat` with `--network host` +
-`-e DEEPSEEK_API_KEY -e NEO4J_PASSWORD` and `/mnt/24tb/habitat` mounted. See `docs/DECISIONS.md`.
+1. **Perceive** — SMPL-X humanoid navigates a real indoor scene via Habitat 3.0; virtual sensors capture RGB, depth, and semantic data.
+2. **Decide** — A local Qwen VLM captions the view; DeepSeek V4 Flash reasons over it and chooses an action + dialogue.
+3. **Navigate** — Habitat executes the action (walk, turn, speak) with physics-correct locomotion.
+4. **Remember** — Every step, utterance, and feeling is logged to Neo4j as a persistent life-record.
+5. **Render** — Selected story beats are re-rendered at film quality through Blender Cycles with zero retargeting (SMPL-X is shared between sim and render).
 
-## Why this shape (hardware reality)
+## Milestones
 
-This runs on an **sm_70 fleet** (Tesla V100 / CMP 100-210, 16 GB, no RT cores).
-That single fact drives the whole design:
+| Milestone | What | Status |
+|-----------|------|--------|
+| **M1** Embodiment | SMPL-X humanoid navigates ReplicaCAD; RGB+depth+semantic sensors | Working |
+| **M2** Mind loop | Perceive → DeepSeek decides → navigate → log Neo4j | Working |
+| **M3** Society | Personas + seeded conflict → DeepSeek storyline + FEELS graph | Working |
+| **M3** Embodied | Two humanoids co-present + logged conversation | Working |
+| **Capstone** | Neo4j storyline line → lip-synced SMPL-X clip | Working |
 
-- **NVIDIA Isaac Sim / Genie Sim / AgiBot World are out.** Isaac requires RTX RT
-  cores; the V100 is explicitly unsupported. AgiBot's GO-1 is a real-robot
-  *manipulation* policy anyway — orthogonal to living narrative lives.
-- **Habitat 3.0 is in.** Standard-CUDA rasterization, runs headless on V100, and
-  its humanoids are **SMPL-X-native** — the exact representation our working
-  Blender renderer already consumes. Motion flows sim → render with **zero
-  retargeting**, killing the cross-skeleton brittleness that sank the prior path.
+All milestones validated on V100 (sm_70), headless, in Docker.
 
-## Architecture (layers)
+## Architecture
 
 | Layer | Tech | Role |
 |-------|------|------|
-| **Mind** (neocortex) | DeepSeek V4 Flash + local Qwen VLM (visual cortex) | perceive → remember → reflect → plan → act → speak |
-| **World / embodiment** | **Habitat 3.0** (V100, headless) | SMPL-X humanoids, navigation, virtual sensors (RGB/depth/semantic/audio), real indoor scenes |
-| **Memory / society** | **Neo4j** | persistent life-record, social graph, storylines, events |
-| **Voice / ears** | Higgs-TTS (`:8055`) + Granite STT (amd0/amd1) | speech out / in |
-| **Cinematic render** | `sampl` SMPL-X → Blender Cycles | film-quality render of *selected* moments; shares SMPL-X pose with Habitat |
+| **Mind** | DeepSeek V4 Flash + local Qwen VLM | perceive → remember → reflect → plan → act → speak |
+| **World** | Habitat 3.0 (V100, headless) | SMPL-X humanoids, navigation, virtual sensors, real indoor scenes |
+| **Memory** | Neo4j | persistent life-record, social graph, storylines, events |
+| **Render** | sampl SMPL-X → Blender Cycles | film-quality render of selected moments; shares SMPL-X pose with Habitat |
+| **Splat** | Gaussian splatting tools | scene capture and reconstruction |
+| **Docupipe** | Documentary production pipeline | research → script → narration → music → final cut |
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detail and
-[`docs/DECISIONS.md`](docs/DECISIONS.md) for the rationale log (mirrored to issues).
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for a deep dive.
 
-## Principle: stay in SMPL-X space
-
-Body shape, pose, hands, and face are **always SMPL-X**. No second skeleton, ever
-— that is the source of every coordinate-convention and rest-pose bug. The same
-pose tensor drives the Habitat humanoid and the Blender render.
-
-## Repo layout (planned)
+## Repo layout
 
 ```
 docs/            architecture, decisions, runbooks
 world/           Habitat integration (env, sensors, humanoid driver)
 mind/            agent cognition (brain client, memory, perception, planner)
 memory/          Neo4j schema + access layer
-render/          bridge to the sampl SMPL-X→Blender cinematic pipeline
+render/          bridge to the sampl SMPL-X → Blender cinematic pipeline
+splat/           Gaussian splatting tools
+docupipe/        documentary production pipeline
 deploy/          docker-compose + per-service Dockerfiles
 ```
 
-## Hardware
+## Quick start (Docker)
 
-GPU fleet: 11× sm_70 16 GB (V100 + CMP), mostly occupied by other services; one
-K620. A separate `rtx0` host has 4× RTX 3060 (Ampere) used as an OptiX render
-host. Everything here targets sm_70 / CUDA, headless, in Docker.
+```bash
+# Clone and configure
+git clone https://github.com/YOUR_USER/lifeworld.git
+cd lifeworld
+cp .env.example .env
+# Edit .env — set NEO4J_PASSWORD and DEEPSEEK_API_KEY
+
+# Run the mind loop (needs Habitat 3.0 images mounted)
+docker compose up mind
+```
+
+See `deploy/` for the full docker-compose configuration.
+
+## Principle: stay in SMPL-X space
+
+Body shape, pose, hands, and face are **always SMPL-X**. No second skeleton, ever. The same pose tensor drives the Habitat humanoid and the Blender render — zero retargeting.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).

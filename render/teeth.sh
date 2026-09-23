@@ -5,9 +5,9 @@
 # looks right here, re-render with: python3 render/scene_cine.py --reuse
 set -euo pipefail
 docker run --rm --gpus device=7 -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONPATH=/work \
-  -v /srv/nvme-data/containers/projects/sampl:/work \
-  -v /srv/nvme-data/containers/projects/bot:/lw \
-  -v /mnt/24tb/a2f:/a2f \
+  -v "${LIFEWORLD_SAMPLES_DIR:-./samples}":/work \
+  -v "${LIFEWORLD_BOT_DIR:-./bot}":/lw \
+  -v "${A2F_DIR:-./a2f}":/a2f \
   lifeworld-preview python3 /lw/render/teeth_preview.py --out /a2f/teeth.png "$@"
-cp /mnt/24tb/a2f/teeth.png /srv/nvme-data/containers/projects/bot/output/teeth.png
+cp "${A2F_DIR:-./a2f}/teeth.png" "${LIFEWORLD_BOT_DIR:-./bot}/output/teeth.png"
 echo "-> output/teeth.png  (edit render/mouth_params.json and re-run to adjust)"

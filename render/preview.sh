@@ -5,10 +5,10 @@
 set -euo pipefail
 ARKIT="${1:-/a2f/test.arkit.json}"; GENDER="${2:-female}"; BETAS="${3:-}"
 docker run --rm --gpus device=7 -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONPATH=/work \
-  -v /srv/nvme-data/containers/projects/sampl:/work \
-  -v /srv/nvme-data/containers/projects/bot:/lw \
-  -v /mnt/24tb/a2f:/a2f \
+  -v "${LIFEWORLD_SAMPLES_DIR:-./samples}":/work \
+  -v "${LIFEWORLD_BOT_DIR:-./bot}":/lw \
+  -v "${A2F_DIR:-./a2f}":/a2f \
   lifeworld-preview python3 /lw/render/preview.py --arkit "$ARKIT" --gender "$GENDER" \
     ${BETAS:+--betas "$BETAS"} --out /a2f/preview.png
-cp /mnt/24tb/a2f/preview.png /srv/nvme-data/containers/projects/bot/output/preview.png
+cp "${A2F_DIR:-./a2f}/preview.png" "${LIFEWORLD_BOT_DIR:-./bot}/output/preview.png"
 echo "preview -> output/preview.png"

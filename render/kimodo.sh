@@ -6,8 +6,8 @@
 #   render/kimodo.sh stop                         # stop the server (frees the GPU)
 # Env: ENC_GPU (encoder GPU, default 5), GEN_GPU (diffusion+render GPU, default 6).
 set -euo pipefail
-SAMPL=/srv/nvme-data/containers/projects/sampl
-BOT=/srv/nvme-data/containers/projects/bot
+SAMPL="${LIFEWORLD_SAMPLES_DIR:-./samples}"
+BOT="${LIFEWORLD_BOT_DIR:-./bot}"
 MERGED=/work/tools/kimodo/text_encoders/merged-llm2vec-fp16
 ENC_GPU="${ENC_GPU:-5}"; GEN_GPU="${GEN_GPU:-6}"; PORT=9550
 
