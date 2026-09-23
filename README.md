@@ -1,12 +1,12 @@
-# lifeworld
-
-**Autonomous SMPL-X humanoid NPCs that live lives.**
-
-Agents perceive a simulated 3D world (Habitat 3.0), decide via DeepSeek V4 Flash, remember in a Neo4j graph, and get rendered cinematically in Blender. Two subsystems: **lifeworld** (NPC simulation) and **docupipe** (documentary production pipeline).
+# Lifeworld
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)](./deploy/)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20V100-lightgrey)]()
 
-## What it does
+> **NPCs that perceive, decide, remember, and get rendered.**
+
+Lifeworld builds autonomous SMPL-X humanoid NPCs that live lives in simulated 3D environments. Habitat 3.0 provides the world, DeepSeek provides the mind, Neo4j provides the memory, and Blender provides the render — all wired end-to-end with zero retargeting.
 
 ```mermaid
 graph LR
@@ -19,38 +19,63 @@ graph LR
     G --> F
 ```
 
-1. **Perceive** — SMPL-X humanoid navigates a real indoor scene via Habitat 3.0; virtual sensors capture RGB, depth, and semantic data.
-2. **Decide** — A local Qwen VLM captions the view; DeepSeek V4 Flash reasons over it and chooses an action + dialogue.
-3. **Navigate** — Habitat executes the action (walk, turn, speak) with physics-correct locomotion.
-4. **Remember** — Every step, utterance, and feeling is logged to Neo4j as a persistent life-record.
-5. **Render** — Selected story beats are re-rendered at film quality through Blender Cycles with zero retargeting (SMPL-X is shared between sim and render).
+## Features
+
+| Feature | Description |
+|---|---|
+| **End-to-End Pipeline** | Perceive → Decide → Navigate → Remember → Render — one continuous loop |
+| **SMPL-X Throughout** | Same pose tensor drives Habitat simulation AND Blender render. Zero retargeting |
+| **Habitat 3.0** | Real indoor scenes (ReplicaCAD), physics-correct locomotion, virtual sensors |
+| **DeepSeek Mind** | V4 Flash reasons over VLM captions to choose actions and dialogue |
+| **Neo4j Memory** | Persistent life-record: steps, utterances, feelings, social graph, storylines |
+| **Cinematic Render** | Blender Cycles renders selected story beats at film quality |
+| **Multi-Agent Society** | Multiple humanoids co-present, conversing, with seeded conflict |
+| **Documentary Pipeline** | Auto-director selects story beats for final film production |
+| **Dockerized** | All milestones validated on V100 (sm_70), headless, in Docker |
+
+## Architecture
+
+| Layer | Tech | Role |
+|---|---|---|
+| **Mind** | DeepSeek V4 Flash + local Qwen VLM | perceive → remember → reflect → plan → act → speak |
+| **World** | Habitat 3.0 (V100, headless) | SMPL-X humanoids, navigation, virtual sensors, real indoor scenes |
+| **Memory** | Neo4j | persistent life-record, social graph, storylines, events |
+| **Render** | sampl SMPL-X → Blender Cycles | film-quality render of selected moments |
+| **Splat** | Gaussian splatting tools | scene capture and reconstruction |
+| **Docupipe** | Documentary production pipeline | research → script → narration → music → final cut |
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for a deep dive.
 
 ## Milestones
 
 | Milestone | What | Status |
-|-----------|------|--------|
+|---|---|---|
 | **M1** Embodiment | SMPL-X humanoid navigates ReplicaCAD; RGB+depth+semantic sensors | Working |
 | **M2** Mind loop | Perceive → DeepSeek decides → navigate → log Neo4j | Working |
 | **M3** Society | Personas + seeded conflict → DeepSeek storyline + FEELS graph | Working |
 | **M3** Embodied | Two humanoids co-present + logged conversation | Working |
 | **Capstone** | Neo4j storyline line → lip-synced SMPL-X clip | Working |
 
-All milestones validated on V100 (sm_70), headless, in Docker.
+## Quick Start
 
-## Architecture
+```bash
+# 1. Clone and configure
+git clone https://github.com/jajmangold/lifeworld.git
+cd lifeworld
+cp .env.example .env
+# Edit .env — set NEO4J_PASSWORD and DEEPSEEK_API_KEY
 
-| Layer | Tech | Role |
-|-------|------|------|
-| **Mind** | DeepSeek V4 Flash + local Qwen VLM | perceive → remember → reflect → plan → act → speak |
-| **World** | Habitat 3.0 (V100, headless) | SMPL-X humanoids, navigation, virtual sensors, real indoor scenes |
-| **Memory** | Neo4j | persistent life-record, social graph, storylines, events |
-| **Render** | sampl SMPL-X → Blender Cycles | film-quality render of selected moments; shares SMPL-X pose with Habitat |
-| **Splat** | Gaussian splatting tools | scene capture and reconstruction |
-| **Docupipe** | Documentary production pipeline | research → script → narration → music → final cut |
+# 2. Launch
+docker compose up mind
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for a deep dive.
+# 3. Verify
+# Mind loop starts processing Habitat observations
+# Check Neo4j at http://localhost:7474 for life-record entries
+```
 
-## Repo layout
+See `deploy/` for the full docker-compose configuration.
+
+## Repo Layout
 
 ```
 docs/            architecture, decisions, runbooks
@@ -63,24 +88,19 @@ docupipe/        documentary production pipeline
 deploy/          docker-compose + per-service Dockerfiles
 ```
 
-## Quick start (Docker)
+## Principle
 
-```bash
-# Clone and configure
-git clone https://github.com/YOUR_USER/lifeworld.git
-cd lifeworld
-cp .env.example .env
-# Edit .env — set NEO4J_PASSWORD and DEEPSEEK_API_KEY
+**Stay in SMPL-X space.** Body shape, pose, hands, and face are always SMPL-X. No second skeleton, ever. The same pose tensor drives the Habitat humanoid and the Blender render — zero retargeting.
 
-# Run the mind loop (needs Habitat 3.0 images mounted)
-docker compose up mind
-```
+## Contributing
 
-See `deploy/` for the full docker-compose configuration.
+1. Fork the repo
+2. Create a feature branch
+3. Make changes and add tests
+4. Run `docker compose up mind` to verify
+5. Open a PR
 
-## Principle: stay in SMPL-X space
-
-Body shape, pose, hands, and face are **always SMPL-X**. No second skeleton, ever. The same pose tensor drives the Habitat humanoid and the Blender render — zero retargeting.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the design source of truth.
 
 ## License
 
